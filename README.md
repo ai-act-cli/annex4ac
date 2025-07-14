@@ -13,7 +13,7 @@ SaaS/PDF in the Pro tier.
 * **Always up‑to‑date** – fetches the latest Annex IV text from the AI Act Explorer every run.
 * **Schema‑first** – YAML skeleton mirrors the 13 required sections.
 * **Fail‑fast CI** – exits 1 when mandatory fields are missing.
-* **Freemium** – `fetch_schema` & `validate` are free; `generate` (PDF) unlocks with a licence key.
+* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) unlocks with a licence key.
 * **One‑line GitHub Action** – block pull requests that break compliance.
 
 ---
@@ -25,7 +25,7 @@ SaaS/PDF in the Pro tier.
 pip install annex4ac
 
 # 2 Pull the latest Annex IV layout
-annex4ac fetch_schema -o annex_template.yaml
+annex4ac fetch-schema annex_template.yaml
 
 # 3 Fill in the YAML → validate
 cp annex_template.yaml my_annex.yaml
@@ -65,7 +65,7 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 
 | Command        | What it does                                                                    |
 | -------------- | ------------------------------------------------------------------------------- |
-| `fetch_schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`.   |
+| `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`.   |
 | `validate`     |  Validate your YAML against the Pydantic schema & Rego rules. Exits 1 on error. |
 | `generate`     | Render PDF via Jinja2 → XeLaTeX (Pro).                                          |
 
