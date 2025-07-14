@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "0.2.0"
+version = "0.2.2"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -13,6 +13,7 @@ dependencies = [
   "requests>=2.32",
   "ruamel.yaml>=0.18",
   "beautifulsoup4>=4.12",
+  "PyYAML>=6.0",
 ]
 
 # консольная команда  (setuptools-style entry points)

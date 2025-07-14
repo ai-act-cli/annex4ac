@@ -36,7 +36,7 @@ from typing import Dict
 
 import requests
 from bs4 import BeautifulSoup
-from ruamel.yaml import YAML
+import yaml
 import typer
 from pydantic import BaseModel, ValidationError, Field
 
@@ -72,7 +72,6 @@ _SECTION_KEYS = [
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
 # -----------------------------------------------------------------------------
-_YAML = YAML()
 app = typer.Typer(add_completion=False)
 
 class AnnexIVSection(BaseModel):
@@ -110,37 +109,67 @@ def _fetch_html(url: str) -> str:
 
 
 def _parse_annex_iv(html: str) -> Dict[str, str]:
-    """Extract section texts from annex page and map to keys."""
+    """Извлекает секции Annex IV по номерам из HTML."""
+    from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
-    content = soup.find("div", class_="entry-content") or soup
+    # Находим основной div с содержимым
+    content = soup.find("div", class_="et_pb_post_content")
+    if not content:
+        return {}
 
-    # Annex page uses <h3>Section 1 — Description</h3> ... <p>text</p>
+    # Ключи для YAML (можно скорректировать под ваши нужды)
+    section_keys = [
+        "system_overview",
+        "development_process",
+        "system_architecture",
+        "performance_metrics",
+        "risk_management",
+        "changes_and_versions",
+        "records_and_logs",
+        "compliance_declaration",
+        "post_market_plan",
+    ]
+
     result = {}
-    for idx, h in enumerate(content.find_all(["h2", "h3", "h4"])):
-        text = h.get_text(strip=True)
-        if not text.lower().startswith("section"):
-            continue
-        sect_index = int(text.split()[1])
-        key = _SECTION_KEYS[sect_index - 1]
-        body_parts = []
-        # Collect sibling paragraphs until the next heading
-        for sib in h.find_next_siblings():
-            if sib.name and sib.name.startswith("h"):
-                break
-            body_parts.append(sib.get_text(" ", strip=True))
-        result[key] = "\n\n".join(body_parts)
+    current_key = None
+    buffer = []
+    section_idx = 0
+
+    for p in content.find_all("p"):
+        text = p.get_text(strip=True)
+        # Новый раздел: начинается с "1.", "2." и т.д.
+        if text and text[0].isdigit() and text[1] == ".":
+            # Сохраняем предыдущий раздел
+            if current_key is not None and buffer:
+                result[current_key] = "\n".join(buffer).strip()
+            # Новый ключ
+            if section_idx < len(section_keys):
+                current_key = section_keys[section_idx]
+                section_idx += 1
+            else:
+                current_key = f"section_{section_idx+1}"
+                section_idx += 1
+            buffer = [text]
+        else:
+            # Подпункты и детали
+            if current_key is not None:
+                buffer.append(text)
+    # Сохраняем последний раздел
+    if current_key is not None and buffer:
+        result[current_key] = "\n".join(buffer).strip()
     return result
 
 
 def _write_yaml(data: Dict[str, str], path: Path):
     with path.open("w", encoding="utf-8") as f:
-        _YAML.dump(data, f)
+        yaml.dump(data, f, allow_unicode=True)
 
 
 def _render_tex_from_yaml(yaml_path: Path, tex_template: Path, out_pdf: Path):
     """Render LaTeX via Jinja2 and compile to PDF (premium)."""
     from jinja2 import Template
-    data = _YAML.load(yaml_path.read_text(encoding="utf-8"))
+    with yaml_path.open("r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
     tmpl = Template(tex_template.read_text(encoding="utf-8"))
     rendered_tex = tmpl.render(**data)
     tmp_tex = yaml_path.with_suffix(".tex")
@@ -166,7 +195,8 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
 def validate(input: Path = typer.Option(..., exists=True, help="Your filled Annex IV YAML")):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     try:
-        payload = _YAML.load(input.read_text(encoding="utf-8"))
+        with input.open("r", encoding="utf-8") as f:
+            payload = yaml.safe_load(f)
         AnnexIVSchema(**payload)  # triggers pydantic validation
     except (ValidationError, Exception) as exc:
         typer.secho("Validation failed:\n" + str(exc), fg=typer.colors.RED, err=True)
