@@ -33,6 +33,7 @@ import json
 import subprocess
 from pathlib import Path
 from typing import Dict
+import re
 
 import requests
 from bs4 import BeautifulSoup
@@ -54,7 +55,7 @@ AI_ACT_ANNEX_IV_PDF = (
 # These are created once during runtime so we can keep the code self-contained; in a
 # full project we might persist them alongside the package.
 _SECTION_KEYS = [
-    "system_overview",          # 1. general description
+    "system_overview",         # 1. general description
     "intended_purpose",        # 2. intended purpose & conditions of use
     "system_architecture",     # 3. system architecture and components
     "development_process",     # 4. development process and lifecycle
@@ -117,18 +118,8 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
     if not content:
         return {}
 
-    # YAML keys (can be adjusted)
-    section_keys = [
-        "system_overview",
-        "development_process",
-        "system_architecture",
-        "performance_metrics",
-        "risk_management",
-        "changes_and_versions",
-        "records_and_logs",
-        "compliance_declaration",
-        "post_market_plan",
-    ]
+    # Use the global _SECTION_KEYS for correct mapping
+    section_keys = _SECTION_KEYS
 
     result = {}
     current_key = None
@@ -136,7 +127,9 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
     section_idx = 0
 
     for p in content.find_all("p"):
-        text = p.get_text(strip=True)
+        text = p.get_text(" ", strip=True)
+        # Remove space before punctuation
+        text = re.sub(r" ([,.;:!?])", r"\1", text)
         # New section: starts with "1.", "2." etc.
         if text and text[0].isdigit() and text[1] == ".":
             # Save previous section
@@ -147,8 +140,7 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
                 current_key = section_keys[section_idx]
                 section_idx += 1
             else:
-                current_key = f"section_{section_idx+1}"
-                section_idx += 1
+                raise ValueError("Annex IV structure on the website has changed: more sections than expected! Please update _SECTION_KEYS and the parser.")
             buffer = [text]
         else:
             # Subpoints and details
