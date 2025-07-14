@@ -1,6 +1,10 @@
 # Annex IV‑as‑Code (annex4ac)
 
-Generate and validate EU AI Act Annex IV technical documentation straight from your CI. 100 % local by default, SaaS/PDF in the Pro tier.
+Generate and validate EU AI Act Annex IV technical documentation straight from your CI. 
+
+100% local by default.
+
+SaaS/PDF in the Pro tier.
 
 ---
 
