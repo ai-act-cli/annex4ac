@@ -13,7 +13,7 @@ Key design goals
 * **Plug-n-play in CI** – exit 1 when validation fails so a GitHub Action can block a PR.
 
 Dependencies (add these to requirements.txt or pyproject):
-    requests, beautifulsoup4, ruamel.yaml, typer[all], pydantic, Jinja2, tinytetx (for PDF)
+    requests, beautifulsoup4, PyYAML, typer[all], pydantic, Jinja2, TinyTeX (for PDF)
 
 Usage examples
 --------------
@@ -51,23 +51,17 @@ AI_ACT_ANNEX_IV_PDF = (
     "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ%3AL_202401689"
 )
 
-# Mapping of Annex IV sections → canonical YAML keys.
-# These are created once during runtime so we can keep the code self-contained; in a
-# full project we might persist them alongside the package.
+# Mapping of Annex IV sections → canonical YAML keys (updated to 9 items, June 2024)
 _SECTION_KEYS = [
     "system_overview",         # 1. general description
     "intended_purpose",        # 2. intended purpose & conditions of use
-    "system_architecture",     # 3. system architecture and components
+    "system_monitoring",       # 3. system monitoring and control
     "development_process",     # 4. development process and lifecycle
     "data_specifications",     # 5. data used for training/validation/testing
     "performance_metrics",     # 6. performance metrics and results
     "risk_management",         # 7. risk management measures
     "post_market_plan",        # 8. post-market monitoring plan
-    "human_machine_interface", # 9. HMI and UX safeguards
-    "changes_and_versions",    # 10. versioning and change management
-    "records_and_logs",        # 11. logging capability and retention
-    "instructions_for_use",    # 12. user documentation / IFU
-    "compliance_declaration",  # 13. EU/CE declaration of conformity
+    "standards_applied",       # 9. standards applied
 ]
 
 # -----------------------------------------------------------------------------
@@ -80,21 +74,16 @@ class AnnexIVSection(BaseModel):
     body: str = Field(..., description="Verbatim text of the section")
 
 class AnnexIVSchema(BaseModel):
-    """Dynamic schema reflecting the latest Annex IV layout."""
-
+    """Dynamic schema reflecting the latest Annex IV layout (9 items, June 2024)."""
     system_overview: str
     intended_purpose: str
-    system_architecture: str
+    system_monitoring: str
     development_process: str
     data_specifications: str
     performance_metrics: str
     risk_management: str
     post_market_plan: str
-    human_machine_interface: str
-    changes_and_versions: str
-    records_and_logs: str
-    instructions_for_use: str
-    compliance_declaration: str
+    standards_applied: str
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -153,8 +142,15 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
 
 
 def _write_yaml(data: Dict[str, str], path: Path):
+    # Dump YAML with a blank line before each key (except the first)
     with path.open("w", encoding="utf-8") as f:
-        yaml.dump(data, f, allow_unicode=True)
+        first = True
+        for key in _SECTION_KEYS:
+            if key in data:
+                if not first:
+                    f.write("\n")
+                yaml.dump({key: data[key]}, f, allow_unicode=True, default_flow_style=False)
+                first = False
 
 
 def _render_tex_from_yaml(yaml_path: Path, tex_template: Path, out_pdf: Path):
