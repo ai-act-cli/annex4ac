@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "0.2.4"
+version = "0.2.5"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV"
 readme = "README.md"
 requires-python = ">=3.9"
