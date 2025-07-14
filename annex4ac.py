@@ -109,15 +109,15 @@ def _fetch_html(url: str) -> str:
 
 
 def _parse_annex_iv(html: str) -> Dict[str, str]:
-    """Извлекает секции Annex IV по номерам из HTML."""
+    """Extracts Annex IV sections by numbers from HTML."""
     from bs4 import BeautifulSoup
     soup = BeautifulSoup(html, "html.parser")
-    # Находим основной div с содержимым
+    # Find the main div with content
     content = soup.find("div", class_="et_pb_post_content")
     if not content:
         return {}
 
-    # Ключи для YAML (можно скорректировать под ваши нужды)
+    # YAML keys (can be adjusted)
     section_keys = [
         "system_overview",
         "development_process",
@@ -137,12 +137,12 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
 
     for p in content.find_all("p"):
         text = p.get_text(strip=True)
-        # Новый раздел: начинается с "1.", "2." и т.д.
+        # New section: starts with "1.", "2." etc.
         if text and text[0].isdigit() and text[1] == ".":
-            # Сохраняем предыдущий раздел
+            # Save previous section
             if current_key is not None and buffer:
                 result[current_key] = "\n".join(buffer).strip()
-            # Новый ключ
+            # New key
             if section_idx < len(section_keys):
                 current_key = section_keys[section_idx]
                 section_idx += 1
@@ -151,10 +151,10 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
                 section_idx += 1
             buffer = [text]
         else:
-            # Подпункты и детали
+            # Subpoints and details
             if current_key is not None:
                 buffer.append(text)
-    # Сохраняем последний раздел
+    # Save last section
     if current_key is not None and buffer:
         result[current_key] = "\n".join(buffer).strip()
     return result
@@ -186,7 +186,11 @@ def _render_tex_from_yaml(yaml_path: Path, tex_template: Path, out_pdf: Path):
 def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False)):
     """Download the latest Annex IV text and convert to YAML scaffold."""
     typer.echo("Fetching Annex IV HTML…")
-    html = _fetch_html(AI_ACT_ANNEX_IV_HTML)
+    try:
+        html = _fetch_html(AI_ACT_ANNEX_IV_HTML)
+    except Exception as e:
+        typer.secho(f"Download error: {e}.", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
     data = _parse_annex_iv(html)
     _write_yaml(data, output)
     typer.secho(f"Schema written to {output}", fg=typer.colors.GREEN)

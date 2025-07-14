@@ -16,7 +16,6 @@ dependencies = [
   "PyYAML>=6.0",
 ]
 
-# консольная команда  (setuptools-style entry points)
 [project.scripts]
 annex4ac = "annex4ac:app"
 

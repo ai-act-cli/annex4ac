@@ -6,7 +6,6 @@ __pycache__/
 *.py[cod]
 *.so
 
-# виртуальные окружения
 # (pipenv, venv, poetry, pdm, pyflow)
 .env
 .venv/
@@ -14,7 +13,7 @@ env/
 venv/
 __pypackages__/
 
-# mypy, pytype, pyre, rope, Spyder и пр.
+# mypy, pytype, pyre, rope, Spyder etc
 .mypy_cache/
 .pytype/
 .pyre/
@@ -42,11 +41,8 @@ eggs/
 ###############################################################################
 #  Annex4ac specific                                                          #
 ###############################################################################
-# сгенерированные шаблоны Annex IV
 annex_schema.yaml
-# итоговые PDF
 *.pdf
-# временные LaTeX файлы
 *.tex
 *.out
 *.toc
@@ -60,7 +56,7 @@ annex_schema.yaml
 *.vrb
 
 ###############################################################################
-#  LaTeX build dir (например latexmk -output-directory=out)                   #
+#  LaTeX build dir (for example latexmk -output-directory=out)                   #
 ###############################################################################
 out/
 
@@ -70,7 +66,7 @@ out/
 .dockerignore
 Dockerfile
 docker-compose.yaml
-# локальные тома / кэши
+# local file / cache
 *.docker
 .docker/
 
@@ -81,14 +77,13 @@ docker-compose.yaml
 .vscode/
 # JetBrains (PyCharm, IntelliJ)
 .idea/
-# global JetBrains pattern можно взять из GitHub/gitignore repo
 # https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 # macOS, Windows junk
 .DS_Store
 Thumbs.db
 
 ###############################################################################
-#  OS-специфические                                                           #
+#  OS-specific                                                         #
 ###############################################################################
 *.swp
 *.swo
