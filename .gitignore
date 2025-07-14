@@ -1,0 +1,95 @@
+###############################################################################
+#  Python basics                                                              #
+###############################################################################
+# byte-code
+__pycache__/
+*.py[cod]
+*.so
+
+# виртуальные окружения
+# (pipenv, venv, poetry, pdm, pyflow)
+.env
+.venv/
+env/
+venv/
+__pypackages__/
+
+# mypy, pytype, pyre, rope, Spyder и пр.
+.mypy_cache/
+.pytype/
+.pyre/
+.ropeproject/
+.spyderproject
+.spyproject
+
+###############################################################################
+#  Build & packaging artefacts                                                #
+###############################################################################
+# setuptools / flit / hatch / pdm
+build/
+dist/
+sdist/
+develop-eggs/
+eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+# wheels, generated locally
+*.whl
+# pytest
+.pytest_cache/
+
+###############################################################################
+#  Annex4ac specific                                                          #
+###############################################################################
+# сгенерированные шаблоны Annex IV
+annex_schema.yaml
+# итоговые PDF
+*.pdf
+# временные LaTeX файлы
+*.tex
+*.out
+*.toc
+*.aux
+*.log
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+*.nav
+*.snm
+*.vrb
+
+###############################################################################
+#  LaTeX build dir (например latexmk -output-directory=out)                   #
+###############################################################################
+out/
+
+###############################################################################
+#  Docker / container                                                         #
+###############################################################################
+.dockerignore
+Dockerfile
+docker-compose.yaml
+# локальные тома / кэши
+*.docker
+.docker/
+
+###############################################################################
+#  IDE & tooling                                                              #
+###############################################################################
+# VS Code
+.vscode/
+# JetBrains (PyCharm, IntelliJ)
+.idea/
+# global JetBrains pattern можно взять из GitHub/gitignore repo
+# https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+# macOS, Windows junk
+.DS_Store
+Thumbs.db
+
+###############################################################################
+#  OS-специфические                                                           #
+###############################################################################
+*.swp
+*.swo
+*.tmp
