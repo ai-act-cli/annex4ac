@@ -4,17 +4,17 @@ Generate and validate EU AI Act Annex IV technical documentation straight fr
 
 100% local by default.
 
-SaaS/PDF in the Pro tier.
+SaaS/PDF unlocks with a licence key .
 
 ---
 
 ## ✨ Features
 
-* **Always up‑to‑date** – fetches the latest Annex IV text from the AI Act Explorer every run.
-* **Schema‑first** – YAML skeleton mirrors the 13 required sections.
-* **Fail‑fast CI** – exits 1 when mandatory fields are missing.
-* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) unlocks with a licence key.
-* **One‑line GitHub Action** – block pull requests that break compliance.
+* **Always up‑to‑date** – every run pulls the latest Annex IV HTML from the official AI Act Explorer.
+* **Schema‑first** – YAML scaffold mirrors the **9 numbered sections** adopted in the July 2024 Official Journal.
+* **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
+* **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
+* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
 
 ---
 
@@ -41,42 +41,38 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 
 ---
 
-## 🗂 Required YAML fields
+## 🗂 Required YAML fields (June 2024 format)
 
-| Key                       | Corresponds to Annex IV § |
-| ------------------------- | ------------------------- |
-| `system_overview`         |  1 «General description»  |
-| `intended_purpose`        |  2                        |
-| `system_architecture`     |  3                        |
-| `development_process`     |  4                        |
-| `data_specifications`     |  5                        |
-| `performance_metrics`     |  6                        |
-| `risk_management`         |  7                        |
-| `post_market_plan`        |  8 (only high‑risk)       |
-| `human_machine_interface` |  9                        |
-| `changes_and_versions`    |  10                       |
-| `records_and_logs`        |  11                       |
-| `instructions_for_use`    |  12                       |
-| `compliance_declaration`  |  13                       |
+| Key                      | Annex IV § |
+| ------------------------ | ---------- |
+| `system_overview`        |  1         |
+| `development_process`    |  2         |
+| `system_monitoring`      |  3         |
+| `performance_metrics`    |  4         |
+| `risk_management`        |  5         |
+| `changes_and_versions`   |  6         |
+| `standards_applied`      |  7         |
+| `compliance_declaration` |  8         |
+| `post_market_plan`       |  9         |
 
 ---
 
 ## 🛠 Commands
 
-| Command        | What it does                                                                    |
-| -------------- | ------------------------------------------------------------------------------- |
-| `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`.   |
-| `validate`     |  Validate your YAML against the Pydantic schema & Rego rules. Exits 1 on error. |
-| `generate`     | Render PDF via Jinja2 → XeLaTeX (Pro).                                          |
+| Command        | What it does                                                                  |
+| -------------- | ----------------------------------------------------------------------------- |
+| `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
+| `validate`     | Validate your YAML against the Pydantic schema. Exits 1 on error.             |
+| `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier).                         |
 
-Run `annex4ac --help` for details.
+Run `annex4ac --help` for full CLI.
 
 ---
 
-## 🐙 GitHub Action example
+## 🐙 GitHub Action example
 
 ```yaml
-name: Annex IV gate
+name: Annex IV gate
 on: [pull_request]
 
 jobs:
@@ -91,7 +87,7 @@ jobs:
       - run: annex4ac validate -i spec/model.yaml
 ```
 
-To use the Pro license in CI, add `ANNEX4AC_LICENSE` as an encrypted repository secret.
+Add `ANNEX4AC_LICENSE` as a secret to use PDF export in CI.
 
 ---
 
@@ -102,34 +98,29 @@ git clone https://github.com/your‑org/annex4ac
 cd annex4ac
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-pytest                     # unit and opa tests
+pytest                     # unit tests
 python annex4ac.py --help
-```
-
-### TinyTeX (Linux/Mac)
-
-```bash
-curl -sL https://yihui.org/tinytex/install-unx.sh | sh
-export PATH="$HOME/.TinyTeX/bin/x86_64-linux:$PATH"
 ```
 
 ---
 
 ## 🔑 Licensing & pricing
 
-* **Community (free)** – validate in CI, unlimited public repos.
-* **Pro €15/mo** – PDF generation, version history (SaaS), email support.
-* **Enterprise** – self‑hosted Docker, SLA 99.9 %, custom sections.
+| Tier       | Price           | Features                                                     |
+| ---------- | --------------- | ------------------------------------------------------------ |
+| Community  | **Free**        | `fetch-schema`, `validate`, unlimited public repos           |
+| Pro        | **€15 / month** | PDF generation, version history (future SaaS), email support |
+| Enterprise | Custom          | Self‑hosted Docker, SLA 99.9 %, custom sections              |
 
-Pay once, use anywhere: CLI, GitHub Action, REST (coming soon).
+Pay once, use anywhere – CLI, GitHub Action, future REST API.
 
 ---
 
 ## 📚 References
 
 * Annex IV HTML – [https://artificialintelligenceact.eu/annex/4/](https://artificialintelligenceact.eu/annex/4/)
-* Official Journal PDF – [https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ\:L\_202401689](https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689)
+* Official Journal PDF – [https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ\:L\_202401689](https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689)
+* ReportLab docs – [https://www.reportlab.com/documentation](https://www.reportlab.com/documentation)
 * Typer docs – [https://typer.tiangolo.com](https://typer.tiangolo.com)
 * Pydantic docs – [https://docs.pydantic.dev](https://docs.pydantic.dev)
 * Open Policy Agent – [https://www.openpolicyagent.org](https://www.openpolicyagent.org)
-* TinyTeX install – [https://yihui.org/tinytex](https://yihui.org/tinytex)
