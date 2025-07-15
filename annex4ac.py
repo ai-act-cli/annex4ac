@@ -40,6 +40,14 @@ from bs4 import BeautifulSoup
 import yaml
 import typer
 from pydantic import BaseModel, ValidationError, Field
+import importlib.resources as pkgres
+from jinja2 import Template
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -63,6 +71,23 @@ _SECTION_KEYS = [
     "post_market_plan",        # 8. post-market monitoring plan
     "standards_applied",       # 9. standards applied
 ]
+
+# Официальные заголовки Annex IV (verbatim, 2024, полные)
+_SECTION_TITLES = [
+    "1. A general description of the AI system including:",
+    "2. A detailed description of the elements of the AI system and of the process for its development, including:",
+    "3. Detailed information about the monitoring, functioning and control of the AI system, in particular with regard to:",
+    "4. A description of the appropriateness of the performance metrics for the specific AI system:",
+    "5. A detailed description of the risk management system in accordance with Article 9:",
+    "6. A description of relevant changes made by the provider to the system through its lifecycle:",
+    "7. A list of the harmonised standards applied in full or in part the references of which have been published in the Official Journal of the European Union, or, where no such standards have been applied, a detailed description of the solutions adopted to meet the essential requirements set out in Chapter II:",
+    "8. A copy of the EU declaration of conformity referred to in Article 47:",
+    "9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):",
+]
+
+# Регистрируем Liberation Sans (ожидается, что LiberationSans-Regular.ttf и LiberationSans-Bold.ttf доступны)
+pdfmetrics.registerFont(TTFont("LiberationSans", "LiberationSans-Regular.ttf"))
+pdfmetrics.registerFont(TTFont("LiberationSans-Bold", "LiberationSans-Bold.ttf"))
 
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
@@ -153,18 +178,91 @@ def _write_yaml(data: Dict[str, str], path: Path):
                 first = False
 
 
-def _render_tex_from_yaml(yaml_path: Path, tex_template: Path, out_pdf: Path):
-    """Render LaTeX via Jinja2 and compile to PDF (premium)."""
-    from jinja2 import Template
-    with yaml_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    tmpl = Template(tex_template.read_text(encoding="utf-8"))
-    rendered_tex = tmpl.render(**data)
-    tmp_tex = yaml_path.with_suffix(".tex")
-    tmp_tex.write_text(rendered_tex, encoding="utf-8")
-    subprocess.run(["xelatex", "-interaction=nonstopmode", str(tmp_tex)], check=True)
-    tmp_pdf = tmp_tex.with_suffix(".pdf")
-    tmp_pdf.rename(out_pdf)
+def _split_to_list_items(text: str):
+    import re
+    # Ищем подпункты (a)...(h) с любым содержимым до следующего подпункта или конца текста
+    pattern = r"\(([a-z])\)\s*((?:.|\n)*?)(?=(\([a-z]\)\s)|$)"
+    matches = list(re.finditer(pattern, text, flags=re.I))
+    if not matches:
+        return Paragraph(text, _get_body_style())
+
+    flowed = []
+    for match in matches:
+        label, body, _ = match.groups()
+        flowed.append(ListItem(
+            Paragraph(f"({label}) {body.strip()}", _get_body_style()),
+            leftIndent=12)
+        )
+    return ListFlowable(flowed, bulletType="bullet", leftIndent=18)
+
+
+def _get_body_style():
+    style = ParagraphStyle(
+        "Body",
+        fontName="LiberationSans",
+        fontSize=11,
+        leading=14,
+        spaceAfter=8,
+        spaceBefore=0,
+        leftIndent=0,
+        rightIndent=0,
+    )
+    return style
+
+def _get_heading_style():
+    style = ParagraphStyle(
+        "Heading",
+        fontName="LiberationSans-Bold",
+        fontSize=14,
+        leading=16,
+        spaceAfter=8,
+        spaceBefore=16,
+        leftIndent=0,
+        rightIndent=0,
+        alignment=0,
+        # Добавим letterSpacing (tracking) через wordSpace, т.к. reportlab не поддерживает letterSpacing напрямую
+        wordSpace=0.5,  # 0.5 pt letter-spacing (эмулируем)
+        # small-caps напрямую не поддерживается, но можно добавить через font или вручную, если потребуется
+    )
+    return style
+
+def _header(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("LiberationSans", 8)
+    canvas.drawRightString(A4[0]-25*mm, A4[1]-15*mm,
+        "Annex IV — Technical documentation referred to in Article 11(1) — v1.0")
+    canvas.restoreState()
+
+def _footer(canvas, doc):
+    canvas.saveState()
+    canvas.setFont("LiberationSans", 9)
+    # Центр нижнего поля — номер страницы
+    page_num = canvas.getPageNumber()
+    canvas.drawCentredString(A4[0]/2, 15*mm, str(page_num))
+    canvas.restoreState()
+
+def _header_and_footer(canvas, doc):
+    _header(canvas, doc)
+    _footer(canvas, doc)
+
+def _render_pdf(payload: dict, out_pdf: Path):
+    doc = SimpleDocTemplate(str(out_pdf), pagesize=A4,
+                            leftMargin=25*mm, rightMargin=25*mm,
+                            topMargin=20*mm, bottomMargin=20*mm)  # поля сверху/снизу 20 мм
+    story = []
+    for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
+        story.append(Paragraph(title, _get_heading_style()))
+        body = payload.get(key, "—")
+        story.append(_split_to_list_items(body))
+        story.append(Spacer(1, 12))
+    doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
+
+def _default_tpl() -> str:
+    return pkgres.read_text("annex4ac", "template.html")
+
+def _render_html(data: dict) -> str:
+    html_src = Template(_default_tpl()).render(**data)
+    return html_src
 
 # -----------------------------------------------------------------------------
 # CLI Commands
@@ -197,17 +295,22 @@ def validate(input: Path = typer.Option(..., exists=True, help="Your filled Anne
 
 @app.command()
 def generate(
-    input: Path = typer.Option(..., exists=True),
-    output: Path = typer.Option(Path("annex_iv.pdf")),
-    tex_template: Path = typer.Option(Path("template.tex"), exists=True),
-    license_key: str = typer.Option(None, envvar="ANNEX4AC_LICENSE"),
+    input: Path = typer.Option(..., help="YAML input file"),
+    output: Path = typer.Option("annex_iv.pdf", help="Output file name"),
+    fmt: str = typer.Option("pdf", help="pdf | html | docx"),
 ):
-    """Generate Annex IV PDF (premium)."""
-    if not license_key:
-        typer.secho("PDF generation is a Pro feature. Set ANNEX4AC_LICENSE.", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
-    _render_tex_from_yaml(input, tex_template, output)
-    typer.secho(f"PDF written to {output}", fg=typer.colors.GREEN)
+    """Generate output from YAML: PDF (default), HTML, or DOCX."""
+    payload = yaml.safe_load(input.read_text())
+    if fmt == "pdf":
+        _render_pdf(payload, output)
+    elif fmt == "html":
+        # Placeholder for HTML export
+        raise NotImplementedError("HTML export not implemented yet.")
+    elif fmt == "docx":
+        # Placeholder for docx export
+        raise NotImplementedError("DOCX export not implemented yet.")
+    else:
+        raise ValueError(f"Unknown format: {fmt}")
 
 if __name__ == "__main__":
     app()
