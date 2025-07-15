@@ -61,15 +61,15 @@ AI_ACT_ANNEX_IV_PDF = (
 
 # Mapping of Annex IV sections → canonical YAML keys (updated to 9 items, June 2024)
 _SECTION_KEYS = [
-    "system_overview",         # 1. general description
-    "intended_purpose",        # 2. intended purpose & conditions of use
-    "system_monitoring",       # 3. system monitoring and control
-    "development_process",     # 4. development process and lifecycle
-    "data_specifications",     # 5. data used for training/validation/testing
-    "performance_metrics",     # 6. performance metrics and results
-    "risk_management",         # 7. risk management measures
-    "post_market_plan",        # 8. post-market monitoring plan
-    "standards_applied",       # 9. standards applied
+    "system_overview",
+    "development_process",
+    "system_monitoring",
+    "performance_metrics",
+    "risk_management",
+    "changes_and_versions",
+    "standards_applied",
+    "compliance_declaration",
+    "post_market_plan",
 ]
 
 # Официальные заголовки Annex IV (verbatim, 2024, полные)
@@ -80,7 +80,7 @@ _SECTION_TITLES = [
     "4. A description of the appropriateness of the performance metrics for the specific AI system:",
     "5. A detailed description of the risk management system in accordance with Article 9:",
     "6. A description of relevant changes made by the provider to the system through its lifecycle:",
-    "7. A list of the harmonised standards applied in full or in part the references of which have been published in the Official Journal of the European Union, or, where no such standards have been applied, a detailed description of the solutions adopted to meet the essential requirements set out in Chapter II:",
+    "7. A list of the harmonised standards applied in full or in part the references of which have been published in the Official Journal of the European Union; where no such harmonised standards have been applied, a detailed description of the solutions adopted to meet the requirements set out in Chapter III, Section 2, including a list of other relevant standards and technical specifications applied:",
     "8. A copy of the EU declaration of conformity referred to in Article 47:",
     "9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):",
 ]
@@ -99,16 +99,15 @@ class AnnexIVSection(BaseModel):
     body: str = Field(..., description="Verbatim text of the section")
 
 class AnnexIVSchema(BaseModel):
-    """Dynamic schema reflecting the latest Annex IV layout (9 items, June 2024)."""
     system_overview: str
-    intended_purpose: str
-    system_monitoring: str
     development_process: str
-    data_specifications: str
+    system_monitoring: str
     performance_metrics: str
     risk_management: str
-    post_market_plan: str
+    changes_and_versions: str
     standards_applied: str
+    compliance_declaration: str
+    post_market_plan: str
 
 # -----------------------------------------------------------------------------
 # Helpers
