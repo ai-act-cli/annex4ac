@@ -46,15 +46,6 @@ required_fields := [
 ### ─────────────────────────────────────────────────────
 ### DENY rules
 ### ─────────────────────────────────────────────────────
-# 1) high‑risk: required sections
-deny contains msg if {
-	is_high_risk
-	some i
-	f := required_fields[i]
-	is_blank(input[f.field])
-	msg := {"rule": f.rule, "msg": f.msg}
-}
-
 # 2) risk_level is required
 deny contains msg if {
 	is_blank(input.risk_level)
@@ -85,12 +76,12 @@ is_sme if input.enterprise_size == "sme"
 deny contains msg if {
     is_high_risk
     not is_sme
-    some j
-    f := required_fields[j]
+    some i
+    f := required_fields[i]
     is_blank(input[f.field])
     msg := {"rule": f.rule, "msg": f.msg}
 }
-# ─── SME‑high‑risk → warning only ────────
+
 warn contains msg if {
     is_high_risk
     is_sme
@@ -99,8 +90,28 @@ warn contains msg if {
     is_blank(input[f.field])
     msg := {
         "rule": "sme_annex_warning",
-        "msg": sprintf("High‑risk SME: Annex IV %v missing – simplified form accepted.", [f.field]),
+        "msg": sprintf("High‑risk SME: Annex IV §%v missing – simplified form accepted.", [k+1]),
     }
+}
+
+### ─────────────────────────────────────────────────────
+### Запрещённые практики (Art. 5 AI Act)
+### ─────────────────────────────────────────────────────
+prohibited_tags := {
+    "social_scoring",
+    "emotion_recognition",
+    "real_time_remote_biometric_identification"
+}
+
+deny contains {"rule": "unacceptable_practice",
+               "msg": sprintf("Use‑case %v is prohibited by Art‑5 AI Act.", [t])} if {
+  t := input.use_cases[_]
+  prohibited_tags[t]
+}
+
+# enterprise_size must exist
+deny contains {"rule": "size_missing", "msg": "enterprise_size must be set."} if {
+    is_blank(input.enterprise_size)
 }
 
 ### ─────────────────────────────────────────────────────

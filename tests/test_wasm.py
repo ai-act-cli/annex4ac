@@ -26,7 +26,8 @@ def test_high_risk_requires_annex_iv():
             "changes_and_versions": "",
             "standards_applied": "",
             "compliance_declaration": "",
-            "post_market_plan": ""
+            "post_market_plan": "",
+            "enterprise_size": "mid"
         }
         res = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
         # Should have violations for missing sections
@@ -48,7 +49,8 @@ def test_limited_risk_annex_iv_optional():
             "changes_and_versions": "",
             "standards_applied": "",
             "compliance_declaration": "",
-            "post_market_plan": ""
+            "post_market_plan": "",
+            "enterprise_size": "mid"
         }
         res = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
         # Should have warnings but no hard violations for missing sections
@@ -73,7 +75,8 @@ def test_auto_high_risk_detection():
             "changes_and_versions": "",
             "standards_applied": "",
             "compliance_declaration": "",
-            "post_market_plan": ""
+            "post_market_plan": "",
+            "enterprise_size": "mid"
         }
         res = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
         # Should have auto_high_risk violation
@@ -101,7 +104,8 @@ def test_all_annex_iii_tags():
                 "changes_and_versions": "",
                 "standards_applied": "",
                 "compliance_declaration": "",
-                "post_market_plan": ""
+                "post_market_plan": "",
+                "enterprise_size": "mid"
             }
             res = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
             # Each tag should trigger auto_high_risk
