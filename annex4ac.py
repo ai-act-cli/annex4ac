@@ -1,4 +1,5 @@
-"""annex4ac.py
+"""
+annex4ac.py
 
 CLI tool that fetches the latest Annex IV text from an authoritative source, normalises it
 into a machine-readable YAML/JSON skeleton, validates user-supplied YAML specs against that
@@ -11,9 +12,10 @@ Key design goals
 * **No hidden SaaS** – default mode is local/freemium. Setting env `ANNEX4AC_LICENSE` or
   a `--license-key` flag unlocks PDF generation.
 * **Plug-n-play in CI** – exit 1 when validation fails so a GitHub Action can block a PR.
+* **Zero binaries** – no LaTeX, no system packages, no OPA binary: PDF and rule engine work via PyPI and built-in Wasm.
 
 Dependencies (add these to requirements.txt or pyproject):
-    requests, beautifulsoup4, PyYAML, typer[all], pydantic, Jinja2, TinyTeX (for PDF)
+    requests, beautifulsoup4, PyYAML, typer[all], pydantic, Jinja2, reportlab, python-opa-wasm, wasmer
 
 Usage examples
 --------------
@@ -32,7 +34,7 @@ import tempfile
 import json
 import subprocess
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Literal, List
 import re
 
 import requests
@@ -48,6 +50,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from opa_wasm import OPARuntime
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -72,7 +75,7 @@ _SECTION_KEYS = [
     "post_market_plan",
 ]
 
-# Официальные заголовки Annex IV (verbatim, 2024, полные)
+# Official Annex IV section titles (verbatim, 2024, full)
 _SECTION_TITLES = [
     "1. A general description of the AI system including:",
     "2. A detailed description of the elements of the AI system and of the process for its development, including:",
@@ -85,9 +88,12 @@ _SECTION_TITLES = [
     "9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):",
 ]
 
-# Регистрируем Liberation Sans (ожидается, что LiberationSans-Regular.ttf и LiberationSans-Bold.ttf доступны)
-pdfmetrics.registerFont(TTFont("LiberationSans", "LiberationSans-Regular.ttf"))
-pdfmetrics.registerFont(TTFont("LiberationSans-Bold", "LiberationSans-Bold.ttf"))
+# Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
+FONTS_DIR = Path(__file__).parent / "fonts"
+pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf"), subfontIndex=0, subsetting=True))
+pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "LiberationSans-Bold.ttf"), subfontIndex=0, subsetting=True))
+
+_WASM_BUNDLE = pkgres.files("annex4ac").joinpath("annex4_validation.wasm")
 
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
@@ -99,6 +105,9 @@ class AnnexIVSection(BaseModel):
     body: str = Field(..., description="Verbatim text of the section")
 
 class AnnexIVSchema(BaseModel):
+    enterprise_size: Literal["sme", "mid", "large"]  # new — Art. 11 exemption
+    risk_level: Literal["high", "limited", "minimal"]
+    use_cases: List[str] = []  # list of tags from Annex III
     system_overview: str
     development_process: str
     system_monitoring: str
@@ -108,6 +117,33 @@ class AnnexIVSchema(BaseModel):
     standards_applied: str
     compliance_declaration: str
     post_market_plan: str
+
+    @staticmethod
+    def allowed_use_cases() -> set:
+        return {
+            "biometric_id",
+            "critical_infrastructure",
+            "education_scoring",
+            "employment_screening",
+            "essential_services",
+            "law_enforcement",
+            "migration_control",
+            "justice_decision"
+        }
+
+    @classmethod
+    def validate_use_cases(cls, value):
+        allowed = cls.allowed_use_cases()
+        unknown = [v for v in value if v not in allowed]
+        if unknown:
+            raise ValueError(f"Unknown use_case(s): {', '.join(unknown)}. Allowed: {', '.join(sorted(allowed))}")
+        return value
+
+    # Pydantic v2: use field validator
+    from pydantic import field_validator
+    @field_validator('use_cases')
+    def check_use_cases(cls, value):
+        return cls.validate_use_cases(value)
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -166,7 +202,7 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
 
 
 def _write_yaml(data: Dict[str, str], path: Path):
-    # Dump YAML with a blank line before each key (except the first)
+    # Dump YAML with an empty line before each key (except the first)
     with path.open("w", encoding="utf-8") as f:
         first = True
         for key in _SECTION_KEYS:
@@ -175,11 +211,16 @@ def _write_yaml(data: Dict[str, str], path: Path):
                     f.write("\n")
                 yaml.dump({key: data[key]}, f, allow_unicode=True, default_flow_style=False)
                 first = False
+        # Always write enterprise_size, risk_level, use_cases, _schema_version
+        yaml.dump({"enterprise_size": data.get("enterprise_size", "mid")}, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump({"risk_level": data.get("risk_level", "")}, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump({"use_cases": data.get("use_cases", [])}, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump({"_schema_version": data.get("_schema_version", "")}, f, allow_unicode=True, default_flow_style=False)
 
 
 def _split_to_list_items(text: str):
     import re
-    # Ищем подпункты (a)...(h) с любым содержимым до следующего подпункта или конца текста
+    # Search for subpoints (a)...(h) with any content up to the next subpoint or end of text
     pattern = r"\(([a-z])\)\s*((?:.|\n)*?)(?=(\([a-z]\)\s)|$)"
     matches = list(re.finditer(pattern, text, flags=re.I))
     if not matches:
@@ -219,23 +260,31 @@ def _get_heading_style():
         leftIndent=0,
         rightIndent=0,
         alignment=0,
-        # Добавим letterSpacing (tracking) через wordSpace, т.к. reportlab не поддерживает letterSpacing напрямую
-        wordSpace=0.5,  # 0.5 pt letter-spacing (эмулируем)
-        # small-caps напрямую не поддерживается, но можно добавить через font или вручную, если потребуется
+        # Add letterSpacing (tracking) via wordSpace, since reportlab does not support letterSpacing directly
+        wordSpace=0.5,  # 0.5 pt letter-spacing (emulated)
+        # small-caps is not supported directly, but can be added via font or manually if needed
     )
     return style
 
 def _header(canvas, doc):
+    import datetime
     canvas.saveState()
     canvas.setFont("LiberationSans", 8)
+    schema = getattr(doc, "_schema_version", None)
+    if not schema:
+        # Try to get from payload
+        try:
+            schema = doc._payload.get("_schema_version", "unknown")
+        except Exception:
+            schema = "unknown"
     canvas.drawRightString(A4[0]-25*mm, A4[1]-15*mm,
-        "Annex IV — Technical documentation referred to in Article 11(1) — v1.0")
+        f"Annex IV v{schema} – generated {datetime.date.today()}")
     canvas.restoreState()
 
 def _footer(canvas, doc):
     canvas.saveState()
     canvas.setFont("LiberationSans", 9)
-    # Центр нижнего поля — номер страницы
+    # Center of the bottom margin — page number
     page_num = canvas.getPageNumber()
     canvas.drawCentredString(A4[0]/2, 15*mm, str(page_num))
     canvas.restoreState()
@@ -247,7 +296,9 @@ def _header_and_footer(canvas, doc):
 def _render_pdf(payload: dict, out_pdf: Path):
     doc = SimpleDocTemplate(str(out_pdf), pagesize=A4,
                             leftMargin=25*mm, rightMargin=25*mm,
-                            topMargin=20*mm, bottomMargin=20*mm)  # поля сверху/снизу 20 мм
+                            topMargin=20*mm, bottomMargin=20*mm)  # top/bottom margins 20 mm
+    doc._schema_version = payload.get("_schema_version", "unknown")
+    doc._payload = payload
     story = []
     for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
         story.append(Paragraph(title, _get_heading_style()))
@@ -263,29 +314,171 @@ def _render_html(data: dict) -> str:
     html_src = Template(_default_tpl()).render(**data)
     return html_src
 
+def _opa_check(payload, sarif_path=None, yaml_path=None):
+    """
+    Offline validation via built-in Wasm runtime.
+    """
+    rt = OPARuntime(_WASM_BUNDLE.read_bytes())
+    result = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
+    
+    # Separate violations (deny) and warnings (warn)
+    violations = []
+    warnings = []
+    
+    for item in result:
+        if "rule" in item and "msg" in item:
+            if item.get("level") == "warn" or "warning" in item["rule"]:
+                warnings.append(item)
+            else:
+                violations.append(item)
+    
+    if sarif_path and violations:
+        _write_sarif(violations, sarif_path, yaml_path)
+    
+    # Print warnings for limited/minimal risk systems
+    for w in warnings:
+        typer.secho(f"[WARNING] {w['rule']}: {w['msg']}", fg=typer.colors.YELLOW)
+    
+    return violations
+
+# SARIF: template for passing region (line/col)
+def _write_sarif(violations, sarif_path, yaml_path):
+    # Use ruamel.yaml AST for precise coordinates
+    key_lines = {}
+    try:
+        from ruamel.yaml import YAML
+        yaml_ruamel = YAML(typ="rt")
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            data = yaml_ruamel.load(f)
+        def find_key_coords(node, target):
+            if hasattr(node, 'lc') and hasattr(node, 'fa'):
+                for k in node:
+                    if k == target:
+                        ln = node.lc.key(k)[0] + 1
+                        col = node.lc.key(k)[1] + 1
+                        return (ln, col)
+                    v = node[k]
+                    if isinstance(v, dict):
+                        res = find_key_coords(v, target)
+                        if res:
+                            return res
+            return None
+        for v in violations:
+            key = v.get("rule", "").replace("_required", "")
+            coords = find_key_coords(data, key)
+            if coords:
+                key_lines[v["rule"]] = coords
+    except Exception:
+        pass
+    sarif = {
+        "version": "2.1.0",
+        "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "annex4ac/opa",
+                        "informationUri": "https://openpolicyagent.org/"
+                    }
+                },
+                "results": [
+                    {
+                        "level": "error",
+                        "ruleId": v["rule"],
+                        "message": {"text": v["msg"]},
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": yaml_path or "annex.yaml"},
+                                    "region": {"startLine": key_lines.get(v["rule"], (1,1))[0], "startColumn": key_lines.get(v["rule"], (1,1))[1]}
+                                }
+                            }
+                        ]
+                    } for v in violations
+                ]
+            }
+        ]
+    }
+    with open(sarif_path, "w", encoding="utf-8") as f:
+        json.dump(sarif, f, ensure_ascii=False, indent=2)
+
+# JWT license check (Pro)
+def _check_license():
+    import os, time, typer
+    import importlib.resources as pkgres
+    import jwt
+    try:
+        pub_key = pkgres.read_text("annex4ac", "lic_pub.pem")
+        claims = jwt.decode(os.getenv("ANNEX4AC_LICENSE"), pub_key, algorithms=["RS256"])
+        assert claims["exp"] > time.time()
+    except Exception:
+        typer.secho("Invalid licence.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
 # -----------------------------------------------------------------------------
 # CLI Commands
 # -----------------------------------------------------------------------------
 
 @app.command()
-def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False)):
+def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False), offline: bool = typer.Option(False, help="Use offline cache if available")):
     """Download the latest Annex IV text and convert to YAML scaffold."""
-    typer.echo("Fetching Annex IV HTML…")
+    import datetime
+    import requests
+    from pathlib import Path as SysPath
+    from shutil import copyfile
+    import yaml as pyyaml
+    cache_dir = os.path.expanduser("~/.cache/annex4ac/")
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_path = os.path.join(cache_dir, "schema-latest.yaml")
     try:
+        if offline:
+            if os.path.exists(cache_path):
+                typer.secho("Using offline cache.", fg=typer.colors.YELLOW)
+                copyfile(cache_path, output)
+                return
+            else:
+                typer.secho("No offline cache found.", fg=typer.colors.RED)
+                raise typer.Exit(1)
         html = _fetch_html(AI_ACT_ANNEX_IV_HTML)
+        r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
+        schema_date = r.headers.get("Last-Modified")
+        if schema_date:
+            from email.utils import parsedate_to_datetime
+            dt = parsedate_to_datetime(schema_date)
+            schema_version = dt.strftime("%Y%m%d")
+        else:
+            schema_version = datetime.date.today().strftime("%Y%m%d")
+        data = _parse_annex_iv(html)
+        data["_schema_version"] = schema_version
+        _write_yaml(data, output)
+        # Save to cache
+        with open(output, "r", encoding="utf-8") as src, open(cache_path, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+        typer.secho(f"Schema written to {output}", fg=typer.colors.GREEN)
     except Exception as e:
-        typer.secho(f"Download error: {e}.", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
-    data = _parse_annex_iv(html)
-    _write_yaml(data, output)
-    typer.secho(f"Schema written to {output}", fg=typer.colors.GREEN)
+        # If network error — try cache
+        if os.path.exists(cache_path):
+            typer.secho(f"Network error, using offline cache: {e}", fg=typer.colors.YELLOW)
+            copyfile(cache_path, output)
+        else:
+            typer.secho(f"Download error and no cache: {e}.", fg=typer.colors.RED)
+            raise typer.Exit(1)
 
 @app.command()
-def validate(input: Path = typer.Option(..., exists=True, help="Your filled Annex IV YAML")):
+def validate(input: Path = typer.Option(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file")):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     try:
+        # Use ruamel.yaml for line/col
+        from ruamel.yaml import YAML
+        yaml_ruamel = YAML(typ="rt")
         with input.open("r", encoding="utf-8") as f:
-            payload = yaml.safe_load(f)
+            payload = yaml_ruamel.load(f)
+        # OPA check before Pydantic
+        violations = _opa_check(payload, sarif_path=sarif, yaml_path=str(input))
+        if violations:
+            for v in violations:
+                typer.secho(f"[OPA] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
         AnnexIVSchema(**payload)  # triggers pydantic validation
     except (ValidationError, Exception) as exc:
         typer.secho("Validation failed:\n" + str(exc), fg=typer.colors.RED, err=True)
@@ -300,6 +493,9 @@ def generate(
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text())
+    # License check for Pro
+    if os.getenv("ANNEX4AC_LICENSE"):
+        _check_license()
     if fmt == "pdf":
         _render_pdf(payload, output)
     elif fmt == "html":

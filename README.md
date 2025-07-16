@@ -15,6 +15,15 @@ SaaS/PDF unlocks with a licence key .
 * **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
 * **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
 * **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
+* **Built-in rule engine** – business-logic validation runs locally via WebAssembly (OPA/Rego in Wasm, no external binaries required).
+
+---
+
+## 🛠 Requirements
+
+- Python 3.9+
+- [python-opa-wasm](https://github.com/a2d24/python-opa-wasm) (installed automatically via pip)
+- [wasmer](https://github.com/wasmerio/wasmer-python) (installed automatically via pip)
 
 ---
 
@@ -45,6 +54,8 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 
 | Key                      | Annex IV § |
 | ------------------------ | ---------- |
+| `risk_level`             | —          | "high", "limited", "minimal" — determines required sections |
+| `use_cases`              | —          | List of tags (Annex III) for auto high-risk. Acceptable values: employment_screening, biometric_id, critical_infrastructure, education_scoring, justice_decision, migration_control |
 | `system_overview`        |  1         |
 | `development_process`    |  2         |
 | `system_monitoring`      |  3         |
@@ -54,6 +65,7 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 | `standards_applied`      |  7         |
 | `compliance_declaration` |  8         |
 | `post_market_plan`       |  9         |
+| `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines whether Annex IV omissions are treated as errors (`deny`) or as recommendations (`warn`). |
 
 ---
 
@@ -62,10 +74,33 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
-| `validate`     | Validate your YAML against the Pydantic schema. Exits 1 on error.             |
+| `validate`     | Validate your YAML against the Pydantic schema and OPA policy. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
 | `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier).                         |
 
 Run `annex4ac --help` for full CLI.
+
+---
+
+## 🏷️ Schema version in PDF
+
+Each PDF now displays the Annex IV schema version stamp (e.g., v20240613) and the document generation date.
+
+---
+
+## 🔑 Pro-licence & JWT
+
+To generate PDF in Pro mode, a license is required (JWT, RSA signature). The ANNEX4AC_LICENSE key can be checked offline, the public key is stored in the package.
+
+---
+
+## 🛡️ Rule-based validation (OPA/Rego)
+
+- **High-risk systems**: All 9 sections of Annex IV are mandatory (Art. 11 §1).
+- **Limited/minimal risk**: Annex IV is optional but recommended for transparency (Art. 52).
+- For high-risk (`risk_level: high`), post_market_plan is required.
+- If use_cases contains a high-risk tag (Annex III), risk_level must be high (auto high-risk).
+- SARIF report now supports coordinates (line/col) for integration with GitHub Code Scanning.
+- **Auto-detection**: Systems with Annex III use_cases are automatically classified as high-risk.
 
 ---
 
@@ -88,6 +123,18 @@ jobs:
 ```
 
 Add `ANNEX4AC_LICENSE` as a secret to use PDF export in CI.
+
+---
+
+## 📄 Offline cache
+
+If Annex IV is temporarily unavailable online, use:
+
+```bash
+annex4ac fetch-schema --offline
+```
+
+This will load the last saved schema from `~/.cache/annex4ac/` (the cache is updated automatically every 14 days).
 
 ---
 

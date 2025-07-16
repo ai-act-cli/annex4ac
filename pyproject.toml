@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "0.3.0"
+version = "0.6.0"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -16,6 +16,8 @@ dependencies = [
   "PyYAML>=6.0",
   "Jinja2>=3.0",
   "reportlab>=4.0",
+  "python-opa-wasm>=0.0.4",
+  "wasmer>=1.1"
 ]
 
 [project.scripts]
@@ -27,3 +29,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["annex4ac"]
