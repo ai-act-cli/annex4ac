@@ -50,7 +50,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from annex4ac.annex4ac_validate import validate_payload
+from policy.annex4ac_validate import validate_payload
 
 # -----------------------------------------------------------------------------
 # Constants
