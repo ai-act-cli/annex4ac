@@ -9,16 +9,28 @@ Replaces Rego-based OPA rules with pure-Python logic.
 import sys
 import json
 import yaml
+# Add import for dynamic high risk tags loading
+try:
+    from annex4ac import fetch_annex3_tags
+except ImportError:
+    fetch_annex3_tags = None
 
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Configuration of rules (translated from Rego)
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
-HIGH_RISK_TAGS = {
-    "employment_screening", "biometric_id", "critical_infrastructure",
-    "education_scoring", "justice_decision", "migration_control",
-    "essential_services", "law_enforcement",
-}
+# Dynamic HIGH_RISK_TAGS loading with fallback
+try:
+    if fetch_annex3_tags:
+        HIGH_RISK_TAGS = fetch_annex3_tags()
+    else:
+        raise Exception("fetch_annex3_tags not available")
+except Exception:
+    HIGH_RISK_TAGS = {
+        "employment_screening", "biometric_id", "critical_infrastructure",
+        "education_scoring", "justice_decision", "migration_control",
+        "essential_services", "law_enforcement",
+    }
 
 PROHIBITED_TAGS = {
     "social_scoring",
@@ -38,9 +50,9 @@ REQUIRED_FIELDS = [
     ("post_market_plan",        "post_market_required",        "§9: post‑market plan is missing."),
 ]
 
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Utility
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def is_blank(x):
     if x is None: return True
@@ -48,9 +60,9 @@ def is_blank(x):
     if isinstance(x, (list, dict)) and len(x) == 0: return True
     return False
 
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Main validation logic
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def validate_payload(payload):
     denies = []
@@ -113,9 +125,9 @@ def validate_payload(payload):
 
     return denies, warns
 
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # CLI
-# ──────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 def main():
     if len(sys.argv) != 2:

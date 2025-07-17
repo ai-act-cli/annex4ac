@@ -279,7 +279,7 @@ def _header(canvas, doc):
         except Exception:
             schema = "unknown"
     canvas.drawRightString(A4[0]-25*mm, A4[1]-15*mm,
-        f"Annex IV v{schema} – generated {datetime.date.today()}")
+        "Annex IV — Technical documentation referred to in Article 11(1) — v20240613")
     canvas.restoreState()
 
 def _footer(canvas, doc):
@@ -301,11 +301,28 @@ def _render_pdf(payload: dict, out_pdf: Path):
     doc._schema_version = payload.get("_schema_version", "unknown")
     doc._payload = payload
     story = []
-    for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
-        story.append(Paragraph(title, _get_heading_style()))
-        body = payload.get(key, "—")
-        story.append(_split_to_list_items(body))
-        story.append(Spacer(1, 12))
+    sme_short = payload.get("enterprise_size", "").lower() == "sme"
+    if sme_short:
+        short_keys = [
+            "system_overview",
+            "development_process",
+            "risk_management",
+            "post_market_plan"
+        ]
+        short_titles = [
+            t for k, t in zip(_SECTION_KEYS, _SECTION_TITLES) if k in short_keys
+        ]
+        for key, title in zip(short_keys, short_titles):
+            story.append(Paragraph(title, _get_heading_style()))
+            body = payload.get(key, "—")
+            story.append(_split_to_list_items(body))
+            story.append(Spacer(1, 12))
+    else:
+        for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
+            story.append(Paragraph(title, _get_heading_style()))
+            body = payload.get(key, "—")
+            story.append(_split_to_list_items(body))
+            story.append(Spacer(1, 12))
     doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
 
 def _default_tpl() -> str:
@@ -499,7 +516,7 @@ def validate(input: Path = typer.Option(..., exists=True, help="Your filled Anne
 def generate(
     input: Path = typer.Option(..., help="YAML input file"),
     output: Path = typer.Option("annex_iv.pdf", help="Output file name"),
-    fmt: str = typer.Option("pdf", help="pdf | html | docx"),
+    fmt: str = typer.Option("pdf", help="pdf | html | docx")
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text())

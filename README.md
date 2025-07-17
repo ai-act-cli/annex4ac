@@ -67,7 +67,7 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 | `standards_applied`      |  7         |
 | `compliance_declaration` |  8         |
 | `post_market_plan`       |  9         |
-| `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines whether Annex IV omissions are treated as errors (`deny`) or as recommendations (`warn`). |
+| `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines if the PDF will be generated in short SME form automatically. |
 
 ---
 
@@ -75,11 +75,17 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
-| `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
+| `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
-| `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier).                         |
+| `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier). For SME (`enterprise_size: sme`) the PDF is always short-form. |
 
 Run `annex4ac --help` for full CLI.
+
+---
+
+## 🏷️ High-risk tags (Annex III)
+
+The list of high-risk tags (Annex III) is now loaded dynamically from the official website. If the network is unavailable, a cache or fallback list is used. This affects the auto_high_risk logic in validation.
 
 ---
 
