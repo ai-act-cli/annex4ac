@@ -12,10 +12,10 @@ Key design goals
 * **No hidden SaaS** – default mode is local/freemium. Setting env `ANNEX4AC_LICENSE` or
   a `--license-key` flag unlocks PDF generation.
 * **Plug-n-play in CI** – exit 1 when validation fails so a GitHub Action can block a PR.
-* **Zero binaries** – no LaTeX, no system packages, no OPA binary: PDF and rule engine work via PyPI and built-in Wasm.
+* **Zero binaries** – no LaTeX, no system packages, no OPA binary: PDF and rule engine work via pure Python.
 
 Dependencies (add these to requirements.txt or pyproject):
-    requests, beautifulsoup4, PyYAML, typer[all], pydantic, Jinja2, reportlab, python-opa-wasm, wasmer
+    requests, beautifulsoup4, PyYAML, typer[all], pydantic, Jinja2, reportlab
 
 Usage examples
 --------------
@@ -30,12 +30,12 @@ exception handling as required.
 
 import os
 import sys
-import tempfile
 import json
-import subprocess
+import tempfile
+import re
 from pathlib import Path
 from typing import Dict, Literal, List
-import re
+from datetime import datetime, timedelta
 
 import requests
 from bs4 import BeautifulSoup
@@ -46,11 +46,11 @@ import importlib.resources as pkgres
 from jinja2 import Template
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from opa_wasm import OPARuntime
+from annex4ac.annex4ac_validate import validate_payload
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -90,10 +90,8 @@ _SECTION_TITLES = [
 
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
 FONTS_DIR = Path(__file__).parent / "fonts"
-pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf"), subfontIndex=0, subsetting=True))
-pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "LiberationSans-Bold.ttf"), subfontIndex=0, subsetting=True))
-
-_WASM_BUNDLE = pkgres.files("annex4ac").joinpath("annex4_validation.wasm")
+pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf")))
+pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "LiberationSans-Bold.ttf")))
 
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
@@ -139,7 +137,6 @@ class AnnexIVSchema(BaseModel):
             raise ValueError(f"Unknown use_case(s): {', '.join(unknown)}. Allowed: {', '.join(sorted(allowed))}")
         return value
 
-    # Pydantic v2: use field validator
     from pydantic import field_validator
     @field_validator('use_cases')
     def check_use_cases(cls, value):
@@ -148,6 +145,10 @@ class AnnexIVSchema(BaseModel):
 # -----------------------------------------------------------------------------
 # Helpers
 # -----------------------------------------------------------------------------
+
+def slugify(text):
+    # Used only for Annex III parser
+    return text.lower().replace(" ", "_").replace("-", "_").replace("–", "_").replace("—", "_").replace("/", "_").replace(".", "").replace(",", "").replace(":", "").replace(";", "").replace("'", "").replace('"', "").strip()
 
 def _fetch_html(url: str) -> str:
     """Return HTML string, raise on non-200."""
@@ -314,31 +315,21 @@ def _render_html(data: dict) -> str:
     html_src = Template(_default_tpl()).render(**data)
     return html_src
 
-def _opa_check(payload, sarif_path=None, yaml_path=None):
+def _validate_payload(payload, sarif_path=None, yaml_path=None):
     """
-    Offline validation via built-in Wasm runtime.
+    Offline validation via pure Python rule engine.
     """
-    rt = OPARuntime(_WASM_BUNDLE.read_bytes())
-    result = rt.evaluate({"input": payload})[0]["expressions"][0]["value"]
-    
-    # Separate violations (deny) and warnings (warn)
-    violations = []
-    warnings = []
-    
-    for item in result:
-        if "rule" in item and "msg" in item:
-            if item.get("level") == "warn" or "warning" in item["rule"]:
-                warnings.append(item)
-            else:
-                violations.append(item)
-    
+    denies, warns = validate_payload(payload)
+    violations = list(denies)
+    warnings = list(warns)
+
     if sarif_path and violations:
         _write_sarif(violations, sarif_path, yaml_path)
-    
+
     # Print warnings for limited/minimal risk systems
     for w in warnings:
         typer.secho(f"[WARNING] {w['rule']}: {w['msg']}", fg=typer.colors.YELLOW)
-    
+
     return violations
 
 # SARIF: template for passing region (line/col)
@@ -415,6 +406,27 @@ def _check_license():
         typer.secho("Invalid licence.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
+def fetch_annex3_tags(cache_path="high_risk_tags.json", cache_days=14):
+    """
+    Parses Annex III, caches the result in high_risk_tags.json (next to annex4ac.py),
+    returns a set of tags.
+    """
+    cache_file = os.path.join(os.path.dirname(__file__), cache_path)
+    if os.path.exists(cache_file):
+        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
+        if datetime.now() - mtime < timedelta(days=cache_days):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                return set(json.load(f))
+    html = _fetch_html("https://artificialintelligenceact.eu/annex/3/")
+    soup = BeautifulSoup(html, "html.parser")
+    tags = {slugify(li.text) for li in soup.select("ol > li")}
+    with open(cache_file, "w", encoding="utf-8") as f:
+        json.dump(sorted(tags), f, ensure_ascii=False, indent=2)
+    return tags
+
+def update_high_risk_tags_json():
+    fetch_annex3_tags()
+
 # -----------------------------------------------------------------------------
 # CLI Commands
 # -----------------------------------------------------------------------------
@@ -468,16 +480,14 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
 def validate(input: Path = typer.Option(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file")):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     try:
-        # Use ruamel.yaml for line/col
         from ruamel.yaml import YAML
         yaml_ruamel = YAML(typ="rt")
         with input.open("r", encoding="utf-8") as f:
             payload = yaml_ruamel.load(f)
-        # OPA check before Pydantic
-        violations = _opa_check(payload, sarif_path=sarif, yaml_path=str(input))
+        violations = _validate_payload(payload, sarif_path=sarif, yaml_path=str(input))
         if violations:
             for v in violations:
-                typer.secho(f"[OPA] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
+                typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
         AnnexIVSchema(**payload)  # triggers pydantic validation
     except (ValidationError, Exception) as exc:

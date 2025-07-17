@@ -15,15 +15,17 @@ SaaS/PDF unlocks with a licence key .
 * **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
 * **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
 * **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
-* **Built-in rule engine** – business-logic validation runs locally via WebAssembly (OPA/Rego in Wasm, no external binaries required).
+* **Built-in rule engine** – business-logic validation runs locally via pure Python.
 
 ---
 
 ## 🛠 Requirements
 
 - Python 3.9+
-- [python-opa-wasm](https://github.com/a2d24/python-opa-wasm) (installed automatically via pip)
-- [wasmer](https://github.com/wasmerio/wasmer-python) (installed automatically via pip)
+- [reportlab](https://www.reportlab.com/documentation) (PDF, Pro)
+- [pydantic](https://docs.pydantic.dev) (schema validation)
+- [typer](https://typer.tiangolo.com) (CLI)
+- [pyyaml](https://pyyaml.org/) (YAML)
 
 ---
 
@@ -74,7 +76,7 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
-| `validate`     | Validate your YAML against the Pydantic schema and OPA policy. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
+| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
 | `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier).                         |
 
 Run `annex4ac --help` for full CLI.
@@ -93,7 +95,7 @@ To generate PDF in Pro mode, a license is required (JWT, RSA signature). The ANN
 
 ---
 
-## 🛡️ Rule-based validation (OPA/Rego)
+## 🛡️ Rule-based validation (Python)
 
 - **High-risk systems**: All 9 sections of Annex IV are mandatory (Art. 11 §1).
 - **Limited/minimal risk**: Annex IV is optional but recommended for transparency (Art. 52).
@@ -170,4 +172,3 @@ Pay once, use anywhere – CLI, GitHub Action, future REST API.
 * ReportLab docs – [https://www.reportlab.com/documentation](https://www.reportlab.com/documentation)
 * Typer docs – [https://typer.tiangolo.com](https://typer.tiangolo.com)
 * Pydantic docs – [https://docs.pydantic.dev](https://docs.pydantic.dev)
-* Open Policy Agent – [https://www.openpolicyagent.org](https://www.openpolicyagent.org)
