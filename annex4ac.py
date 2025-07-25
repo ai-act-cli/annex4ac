@@ -96,7 +96,10 @@ pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "Liberatio
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
 # -----------------------------------------------------------------------------
-app = typer.Typer(add_completion=False)
+app = typer.Typer(
+    add_completion=False,
+    help="Generate and validate EU AI Act Annex IV technical documentation. \n\n ⚠️  LEGAL DISCLAIMER: This software is provided for informational and compliance assistance purposes only. It is not legal advice and should not be relied upon as such. Users are responsible for ensuring their documentation meets all applicable legal requirements and should consult with qualified legal professionals for compliance matters. The authors disclaim any liability for damages arising from the use of this software.\n\n🔒 DATA PROTECTION: All processing occurs locally on your machine. No data leaves your system."
+)
 
 class AnnexIVSection(BaseModel):
     heading: str = Field(..., description="Canonical heading from Annex IV")

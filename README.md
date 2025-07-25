@@ -6,6 +6,10 @@ Generate and validate EU AI Act Annex IV technical documentation straight fr
 
 SaaS/PDF unlocks with a licence key .
 
+> **⚠️ Legal Disclaimer:** This software is provided for informational and compliance assistance purposes only. It is not legal advice and should not be relied upon as such. Users are responsible for ensuring their documentation meets all applicable legal requirements and should consult with qualified legal professionals for compliance matters. The authors disclaim any liability for damages arising from the use of this software.
+
+> **🔒 Data Protection:** All processing occurs locally on your machine. No data leaves your system.
+
 ---
 
 ## ✨ Features
@@ -178,3 +182,20 @@ Pay once, use anywhere – CLI, GitHub Action, future REST API.
 * ReportLab docs – [https://www.reportlab.com/documentation](https://www.reportlab.com/documentation)
 * Typer docs – [https://typer.tiangolo.com](https://typer.tiangolo.com)
 * Pydantic docs – [https://docs.pydantic.dev](https://docs.pydantic.dev)
+
+---
+
+## 📄 Licensing
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### Third-party Components
+
+* **PyJWT** - MIT License
+* **ReportLab** - BSD-style License  
+* **Typer** - MIT License
+* **Liberation Sans Fonts** - SIL Open Font License 1.1 (included in `fonts/` directory)
+
+The Liberation Sans fonts are used for PDF generation and are licensed under the SIL Open Font License 1.1. See the [LICENSE](LICENSE) file for the complete license text. 
+
+The software assists in preparing documentation, but does not confirm compliance with legal requirements or standards. The user is responsible for the final accuracy and compliance of the documents.

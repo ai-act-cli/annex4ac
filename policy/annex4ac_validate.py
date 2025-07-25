@@ -108,13 +108,7 @@ def validate_payload(payload):
     for idx, (field, rule, msg) in enumerate(REQUIRED_FIELDS):
         if high_risk:
             if is_blank(payload.get(field)):
-                if not is_sme:
-                    denies.append({"rule":rule,"msg":msg})
-                else:
-                    warns.append({
-                        "rule":"sme_annex_warning",
-                        "msg":f"High‑risk SME: Annex IV §{idx+1} missing – simplified form accepted."
-                    })
+                denies.append({"rule":rule,"msg":msg})
         else:
             # warn for limited/minimal risk
             if is_blank(payload.get(field)):
