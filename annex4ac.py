@@ -33,6 +33,7 @@ import sys
 import json
 import tempfile
 import re
+import ftfy
 from pathlib import Path
 from typing import Dict, Literal, List
 from datetime import datetime, timedelta
@@ -51,6 +52,63 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from policy.annex4ac_validate import validate_payload
+import unicodedata
+from docx_generator import render_docx
+
+import re
+from ftfy import fix_text
+from markupsafe import escape, Markup
+
+# Регулярные выражения для парсинга списков
+BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
+SUBPOINT_RE = re.compile(r'^\(([a-z])\)\s+', re.I)  # (a), (b)...
+
+def listify(text: str) -> Markup:
+    if not text:
+        return Markup("")
+    text = fix_text(text)
+
+    out = []
+    mode = None          # None | 'ul' | 'ol'
+    buf  = []
+
+    def flush():
+        nonlocal mode, buf
+        if not mode or not buf:
+            return
+        if mode == 'ol':
+            out.append('<ol type="a">' + ''.join(f'<li>{escape(x)}</li>' for x in buf) + '</ol>')
+        else:
+            out.append('<ul>' + ''.join(f'<li>{escape(x)}</li>' for x in buf) + '</ul>')
+        mode, buf = None, []
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            # пустая строка внутри списка – просто пропускаем
+            if mode in ('ul', 'ol'):
+                continue
+            flush()
+            continue
+
+        if SUBPOINT_RE.match(line):
+            cleaned = SUBPOINT_RE.sub('', line, 1).strip()
+            if mode != 'ol':
+                flush(); mode = 'ol'
+            buf.append(cleaned)
+        elif BULLET_RE.match(line):
+            cleaned = BULLET_RE.sub('', line, 1).strip()
+            if mode != 'ul':
+                flush(); mode = 'ul'
+            buf.append(cleaned)
+        else:
+            flush()
+            out.append(f'<p>{escape(line)}</p>')
+
+    flush()
+    return Markup('\n'.join(out))
+
+
 
 # -----------------------------------------------------------------------------
 # Constants
@@ -87,6 +145,9 @@ _SECTION_TITLES = [
     "8. A copy of the EU declaration of conformity referred to in Article 47:",
     "9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):",
 ]
+
+# Unified section mapping for all formats
+_SECTION_MAPPING = list(zip(_SECTION_TITLES, _SECTION_KEYS))
 
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -282,7 +343,7 @@ def _header(canvas, doc):
         except Exception:
             schema = "unknown"
     canvas.drawRightString(A4[0]-25*mm, A4[1]-15*mm,
-        "Annex IV — Technical documentation referred to in Article 11(1) — v20240613")
+        f"Annex IV — Technical documentation referred to in Article 11(1) — v{schema}")
     canvas.restoreState()
 
 def _footer(canvas, doc):
@@ -318,22 +379,48 @@ def _render_pdf(payload: dict, out_pdf: Path):
         for key, title in zip(short_keys, short_titles):
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
+            # Восстанавливаем логические переводы строк для YAML flow scalars
+            body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
+            body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
             story.append(_split_to_list_items(body))
             story.append(Spacer(1, 12))
     else:
         for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
+            # Восстанавливаем логические переводы строк для YAML flow scalars
+            body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
+            body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
             story.append(_split_to_list_items(body))
             story.append(Spacer(1, 12))
     doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
 
 def _default_tpl() -> str:
-    return pkgres.read_text("annex4ac", "template.html")
+    return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
 
 def _render_html(data: dict) -> str:
-    html_src = Template(_default_tpl()).render(**data)
-    return html_src
+    """Render HTML from template with data."""
+    from datetime import datetime
+    from jinja2 import Environment, select_autoescape
+
+    # нормализуем строки
+    norm = {}
+    for k, v in data.items():
+        if isinstance(v, str):
+            # Восстанавливаем логические переводы строк для YAML flow scalars
+            v = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', v)
+            v = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', v, flags=re.I)
+            norm[k] = fix_text(v)
+        else:
+            norm[k] = v
+    norm['generation_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    norm['schema_version']  = norm.get('_schema_version', 'unknown')
+    
+    env = Environment(autoescape=select_autoescape(['html', 'xml']))
+    env.filters['listify'] = listify  # добавляем фильтр
+    
+    template = env.from_string(_default_tpl())
+    return template.render(**norm)
 
 def _validate_payload(payload, sarif_path=None, yaml_path=None):
     """
@@ -501,8 +588,8 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
             else:
                 typer.secho("No offline cache found.", fg=typer.colors.RED)
                 raise typer.Exit(1)
-        html = _fetch_html(AI_ACT_ANNEX_IV_HTML)
         r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
+        html = r.text
         schema_date = r.headers.get("Last-Modified")
         if schema_date:
             from email.utils import parsedate_to_datetime
@@ -552,19 +639,22 @@ def generate(
     fmt: str = typer.Option("pdf", help="pdf | html | docx")
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
-    payload = yaml.safe_load(input.read_text())
-    # License check for Pro
-    if os.getenv("ANNEX4AC_LICENSE"):
-        _check_license()
+    payload = yaml.safe_load(input.read_text(encoding='utf-8'))
+    
+    # License check for Pro features (PDF requires license)
     if fmt == "pdf":
         _check_license()
         _render_pdf(payload, output)
+        typer.secho(f"PDF generated: {output}", fg=typer.colors.GREEN)
     elif fmt == "html":
-        # Placeholder for HTML export
-        raise NotImplementedError("HTML export not implemented yet.")
+        # HTML is free
+        html_content = _render_html(payload)
+        output.write_text(html_content, encoding='utf-8')
+        typer.secho(f"HTML generated: {output}", fg=typer.colors.GREEN)
     elif fmt == "docx":
-        # Placeholder for docx export
-        raise NotImplementedError("DOCX export not implemented yet.")
+        # DOCX is free
+        render_docx(payload, output)
+        typer.secho(f"DOCX generated: {output}", fg=typer.colors.GREEN)
     else:
         raise ValueError(f"Unknown format: {fmt}")
 

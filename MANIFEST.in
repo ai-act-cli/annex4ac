@@ -1,4 +1,5 @@
 recursive-include annex4ac/fonts *.ttf OFL.txt
+recursive-include annex4ac/templates *.html
 include LICENSE
 include annex4ac/lic_pub.pem
 include THIRD_PARTY_LICENSES.md

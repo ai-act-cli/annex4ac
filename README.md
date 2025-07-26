@@ -47,9 +47,16 @@ cp annex_template.yaml my_annex.yaml
 $EDITOR my_annex.yaml
 annex4ac validate -i my_annex.yaml   # "Validation OK!" or exit 1
 
-# 4 (Pro) Generate the PDF
+# 4 Generate output (PDF requires license)
+# HTML (free)
+annex4ac generate -i my_annex.yaml -o docs/annex_iv.html --fmt html
+
+# DOCX (free)  
+annex4ac generate -i my_annex.yaml -o docs/annex_iv.docx --fmt docx
+
+# PDF (Pro - requires license)
 export ANNEX4AC_LICENSE="your_jwt_token_here"
-annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
+annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf --fmt pdf
 ```
 
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
@@ -83,7 +90,7 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
-| `generate`     | Render PDF with pure‑Python **ReportLab** (Pro tier). For SME (`enterprise_size: sme`) the PDF is always short-form. |
+| `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
 
 Run `annex4ac --help` for full CLI.
 
