@@ -1,4 +1,7 @@
 recursive-include annex4ac/fonts *.ttf OFL.txt
 include LICENSE
 include annex4ac/lic_pub.pem
-include THIRD_PARTY_LICENSES.md 
+include THIRD_PARTY_LICENSES.md
+include generate_keys.py
+include generate_license.py
+include LICENSE_SYSTEM.md 

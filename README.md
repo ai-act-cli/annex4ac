@@ -47,10 +47,12 @@ cp annex_template.yaml my_annex.yaml
 $EDITOR my_annex.yaml
 annex4ac validate -i my_annex.yaml   # "Validation OK!" or exit 1
 
-# 4 (Pro) Generate the PDF
-echo "ANNEX4AC_LICENSE=your_key" >> ~/.bashrc
+# 4 (Pro) Generate the PDF
+export ANNEX4AC_LICENSE="your_jwt_token_here"
 annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf
 ```
+
+> **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
 
 > **Hint :** You only need to edit the YAML once per model version—CI keeps it green.
 
@@ -101,7 +103,7 @@ Each PDF now displays the Annex IV schema version stamp (e.g., v20240613) and th
 
 ## 🔑 Pro-licence & JWT
 
-To generate PDF in Pro mode, a license is required (JWT, RSA signature). The ANNEX4AC_LICENSE key can be checked offline, the public key is stored in the package.
+To generate PDF in Pro mode, a license is required (JWT, RSA signature). The ANNEX4AC_LICENSE key can be checked offline, the public key is stored in the package. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for detailed information about the license system.
 
 ---
 

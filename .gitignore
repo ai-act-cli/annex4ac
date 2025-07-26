@@ -88,3 +88,6 @@ Thumbs.db
 *.swp
 *.swo
 *.tmp
+
+# Private RSA key for JWT license signing (keep secure!)
+private.pem

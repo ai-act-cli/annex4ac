@@ -415,15 +415,45 @@ def _write_sarif(violations, sarif_path, yaml_path):
 
 # JWT license check (Pro)
 def _check_license():
-    import os, time, typer
-    import importlib.resources as pkgres
-    import jwt
-    try:
-        pub_key = pkgres.read_text("annex4ac", "lic_pub.pem")
-        claims = jwt.decode(os.getenv("ANNEX4AC_LICENSE"), pub_key, algorithms=["RS256"])
-        assert claims["exp"] > time.time()
-    except Exception:
-        typer.secho("Invalid licence.", fg=typer.colors.RED)
+    import os, time, typer, jwt
+    from importlib.resources import files
+
+    token = os.getenv("ANNEX4AC_LICENSE")
+    if not token:
+        typer.secho("Licence env ANNEX4AC_LICENSE not set", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    # 1) Extract kid from header
+    header = jwt.get_unverified_header(token)
+    kid = header.get("kid")
+
+    # 2) Public key dictionary (ready for rotation)
+    pub_map = {
+        "2025-01": Path(__file__).parent.joinpath("annex4ac", "lic_pub.pem").read_text()
+    }
+
+    key = pub_map.get(kid)
+    if not key:
+        typer.secho(f"No public key for kid={kid}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    claims = jwt.decode(
+        token,
+        key,
+        algorithms=["RS256"],              # Hardcode algorithm for security
+        issuer="annex4ac.io",
+        audience="annex4ac-cli",
+        options={"require": ["exp", "iat", "iss", "aud"]}
+    )
+
+    # 3) Check expiration and plan
+    if claims["exp"] < time.time():
+        typer.secho("License expired", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    plan = claims.get("plan")
+    if plan != "pro":
+        typer.secho(f"License plan '{plan}' insufficient for PDF generation", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 def fetch_annex3_tags(cache_path="high_risk_tags.json", cache_days=14):
@@ -527,6 +557,7 @@ def generate(
     if os.getenv("ANNEX4AC_LICENSE"):
         _check_license()
     if fmt == "pdf":
+        _check_license()
         _render_pdf(payload, output)
     elif fmt == "html":
         # Placeholder for HTML export
