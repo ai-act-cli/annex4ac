@@ -60,7 +60,7 @@ from docx_generator import render_docx
 import re
 from ftfy import fix_text
 from markupsafe import escape, Markup
-from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION
+from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
 
 def _parse_iso_date(val):
     """Parse ISO date string or datetime object to datetime."""
@@ -164,15 +164,6 @@ def listify(text: str) -> Markup:
 # -----------------------------------------------------------------------------
 # Constants
 # -----------------------------------------------------------------------------
-# Primary source – HTML (easier to parse than PDF)
-AI_ACT_ANNEX_IV_HTML = "https://artificialintelligenceact.eu/annex/4/"
-# Fallback – Official Journal PDF (for archival integrity)
-AI_ACT_ANNEX_IV_PDF = (
-    "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ%3AL_202401689"
-)
-
-# Section mapping imported from constants.py
-
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
 FONTS_DIR = Path(__file__).parent / "fonts"
 pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf")))
@@ -834,15 +825,8 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
                 raise typer.Exit(1)
         r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
         html = r.text
-        schema_date = r.headers.get("Last-Modified")
-        if schema_date:
-            from email.utils import parsedate_to_datetime
-            dt = parsedate_to_datetime(schema_date)
-            schema_version = dt.strftime("%Y%m%d")
-        else:
-            schema_version = datetime.date.today().strftime("%Y%m%d")
         data = _parse_annex_iv(html)
-        data["_schema_version"] = schema_version
+        data["_schema_version"] = SCHEMA_VERSION
         _write_yaml(data, output)
         # Save to cache
         with open(output, "r", encoding="utf-8") as src, open(cache_path, "w", encoding="utf-8") as dst:
