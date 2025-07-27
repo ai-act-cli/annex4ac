@@ -20,6 +20,10 @@ SaaS/PDF unlocks with a licence key .
 * **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
 * **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
 * **Built-in rule engine** – business-logic validation runs locally via pure Python.
+* **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
+* **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
+* **Freshness validation** – warns or fails when documentation is older than specified threshold (Article 11 compliance).
+* **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
 
 ---
 
@@ -81,6 +85,8 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf --fmt pdf
 | `compliance_declaration` |  8         |
 | `post_market_plan`       |  9         |
 | `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines if the PDF will be generated in short SME form automatically. |
+| `placed_on_market`       | —          | ISO datetime when the AI system was placed on market (required for retention calculation). |
+| `last_updated`           | —          | ISO datetime of last documentation update (required for freshness validation). |
 
 ---
 
@@ -89,10 +95,45 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf --fmt pdf
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
-| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations.             |
+| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--max-age` for freshness validation, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
 
 Run `annex4ac --help` for full CLI.
+
+---
+
+## 🆕 New Features
+
+### EU-Compliant List Formatting
+Lists are automatically formatted according to EU drafting rules:
+- Ordered lists: `(a) ...; (b) ...; (c) ...`
+- Unordered lists: `• ...; • ...; • ...`
+- Proper punctuation with semicolons and final periods
+
+### Retention and Freshness Tracking
+- **10-year retention**: Automatic calculation and metadata embedding
+- **Freshness validation**: `--max-age 180` (default) or `--strict-age` for CI enforcement
+- **Compliance**: Meets Article 11 (up-to-date) and Article 18 (retention) requirements
+
+### PDF/A-2b Archival Support
+Enable archival PDF generation with:
+
+```bash
+# Generate PDF/A-2b for long-term preservation
+annex4ac generate -i my_annex.yaml --fmt pdf --pdfa
+
+# PDF/A-2b includes:
+# - Embedded sRGB ICC profile
+# - XMP metadata
+# - ISO 19005-2:2011 compliance
+# - 10-year retention metadata
+```
+
+**Legal compliance**: PDF/A-2b format ensures documents remain accessible and visually identical for decades, meeting archival requirements under Article 18 of Regulation 2024/1689.
+```bash
+export ANNEX4AC_PDFA=1
+annex4ac generate -i my_annex.yaml -o annex_iv.pdf --fmt pdf
+```
 
 ---
 
@@ -186,11 +227,13 @@ Pay once, use anywhere – CLI, GitHub Action, future REST API.
 
 ## 📚 References
 
-* Annex IV HTML – [https://artificialintelligenceact.eu/annex/4/](https://artificialintelligenceact.eu/annex/4/)
-* Official Journal PDF – [https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ\:L\_202401689](https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689)
+* Annex IV HTML – [https://artificialintelligenceact.eu/annex/4/](https://artificialintelligenceact.eu/annex/4/)
+* Official Journal PDF – [https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689](https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ:L_202401689)
 * ReportLab docs – [https://www.reportlab.com/documentation](https://www.reportlab.com/documentation)
 * Typer docs – [https://typer.tiangolo.com](https://typer.tiangolo.com)
 * Pydantic docs – [https://docs.pydantic.dev](https://docs.pydantic.dev)
+* PDF/A Standard – [ISO 19005-2:2011](https://www.iso.org/standard/50655.html)
+* sRGB Color Space – [IEC 61966-2-1:1999](https://webstore.iec.ch/publication/6169)
 
 ---
 

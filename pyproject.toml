@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "0.9.8"
+version = "0.9.9"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -20,7 +20,8 @@ dependencies = [
   "pyjwt>=2.9,<2.10",
   "cryptography>=42",
   "python-docx>=1.1",
-  "ftfy>=6.0"
+  "ftfy>=6.0",
+  "pikepdf>=8.0"
 ]
 
 [project.scripts]
@@ -35,3 +36,6 @@ addopts = "-q"
 
 [tool.setuptools.packages.find]
 include = ["annex4ac"]
+
+[tool.setuptools.package-data]
+annex4ac = ["resources/*.icc", "fonts/*.ttf", "templates/*.html"]

@@ -36,16 +36,17 @@ import re
 import ftfy
 from pathlib import Path
 from typing import Dict, Literal, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from dateutil.relativedelta import relativedelta
 
 import requests
 from bs4 import BeautifulSoup
 import yaml
 import typer
-from pydantic import BaseModel, ValidationError, Field
+from pydantic import BaseModel, ValidationError, Field, field_validator
 import importlib.resources as pkgres
 from jinja2 import Template
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem, KeepTogether
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
@@ -59,7 +60,14 @@ import re
 from ftfy import fix_text
 from markupsafe import escape, Markup
 
-# Регулярные выражения для парсинга списков
+# Attempt to import pikepdf for PDF/A support
+try:
+    import pikepdf
+    PIKEPDF_AVAILABLE = True
+except ImportError:
+    PIKEPDF_AVAILABLE = False
+
+# Regular expressions for parsing lists
 BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
 SUBPOINT_RE = re.compile(r'^\(([a-z])\)\s+', re.I)  # (a), (b)...
 
@@ -76,16 +84,21 @@ def listify(text: str) -> Markup:
         nonlocal mode, buf
         if not mode or not buf:
             return
+        def punctuate(arr):
+            arr = [s.rstrip(' ;.') for s in arr]
+            return [s + (';' if i < len(arr)-1 else '.') for i, s in enumerate(arr)]
         if mode == 'ol':
-            out.append('<ol type="a">' + ''.join(f'<li>{escape(x)}</li>' for x in buf) + '</ol>')
+            li = ''.join(f'<li>{escape(x)}</li>' for x in punctuate(buf))
+            out.append(f'<ol class="alpha">{li}</ol>')
         else:
-            out.append('<ul>' + ''.join(f'<li>{escape(x)}</li>' for x in buf) + '</ul>')
+            li = ''.join(f'<li>{escape(x)}</li>' for x in punctuate(buf))
+            out.append(f'<ul>{li}</ul>')
         mode, buf = None, []
 
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
-            # пустая строка внутри списка – просто пропускаем
+            # empty line inside list – just skip
             if mode in ('ul', 'ol'):
                 continue
             flush()
@@ -179,6 +192,15 @@ class AnnexIVSchema(BaseModel):
     standards_applied: str
     compliance_declaration: str
     post_market_plan: str
+    placed_on_market: datetime
+    last_updated: datetime
+
+    @field_validator('last_updated')
+    def _fresh_enough(cls, v, info):
+        pom = info.data.get('placed_on_market')
+        if pom and v < pom:
+            raise ValueError("last_updated cannot be before placed_on_market")
+        return v
 
     @staticmethod
     def allowed_use_cases() -> set:
@@ -201,7 +223,6 @@ class AnnexIVSchema(BaseModel):
             raise ValueError(f"Unknown use_case(s): {', '.join(unknown)}. Allowed: {', '.join(sorted(allowed))}")
         return value
 
-    from pydantic import field_validator
     @field_validator('use_cases')
     def check_use_cases(cls, value):
         return cls.validate_use_cases(value)
@@ -283,22 +304,78 @@ def _write_yaml(data: Dict[str, str], path: Path):
         yaml.dump({"_schema_version": data.get("_schema_version", "")}, f, allow_unicode=True, default_flow_style=False)
 
 
-def _split_to_list_items(text: str):
-    import re
-    # Search for subpoints (a)...(h) with any content up to the next subpoint or end of text
-    pattern = r"\(([a-z])\)\s*((?:.|\n)*?)(?=(\([a-z]\)\s)|$)"
-    matches = list(re.finditer(pattern, text, flags=re.I))
-    if not matches:
-        return Paragraph(text, _get_body_style())
+def _punctuate(items: list[str]) -> list[str]:
+    """Adds ';' after each list item and '.' after the last one."""
+    if not items:
+        return items
+    out = []
+    for i, t in enumerate(items):
+        t = t.rstrip(" ;.")
+        out.append(t + ("." if i == len(items)-1 else ";"))
+    return out
 
-    flowed = []
-    for match in matches:
-        label, body, _ = match.groups()
-        flowed.append(ListItem(
-            Paragraph(f"({label}) {body.strip()}", _get_body_style()),
-            leftIndent=12)
-        )
-    return ListFlowable(flowed, bulletType="bullet", leftIndent=18)
+def _make_ul(items):
+    items = _punctuate(items)
+    return ListFlowable(
+        [Paragraph(t, _get_body_style()) for t in items],
+        bulletType='bullet',
+        leftIndent=18,
+        bulletIndent=0,
+    )
+
+def _make_ol(items, start=1):
+    items = _punctuate(items)
+    return ListFlowable(
+        [Paragraph(t, _get_body_style()) for t in items],
+        bulletType='a',          # a, b, c...
+        bulletFormat='(%s)',     # wrap in parentheses
+        start=start,
+        leftIndent=18,
+        bulletIndent=0,
+    )
+
+def _text_to_flowables(text: str):
+    """
+    Splits block into Paragraph / ListFlowable using the same regex as DOCX.
+    Supports simple UL and OL lists (a)(b)(c).
+    """
+    if not text:
+        return [Paragraph('—', _get_body_style())]
+
+    lines = text.splitlines()
+    flows, mode, buf = [], None, []
+
+    def flush():
+        nonlocal mode, buf
+        if not buf:
+            return
+        if mode == 'ol':
+            flows.append(_make_ol(buf))
+        elif mode == 'ul':
+            flows.append(_make_ul(buf))
+        mode, buf = None, []
+
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            # empty line ends current list
+            flush()
+            continue
+        if SUBPOINT_RE.match(line):
+            cleaned = SUBPOINT_RE.sub('', line, 1).strip()
+            if mode != 'ol':
+                flush(); mode = 'ol'
+            buf.append(cleaned)
+        elif BULLET_RE.match(line):
+            cleaned = BULLET_RE.sub('', line, 1).strip()
+            if mode != 'ul':
+                flush(); mode = 'ul'
+            buf.append(cleaned)
+        else:
+            flush()
+            flows.append(Paragraph(line, _get_body_style()))
+    flush()
+    return [KeepTogether(f) for f in flows]
 
 
 def _get_body_style():
@@ -379,21 +456,103 @@ def _render_pdf(payload: dict, out_pdf: Path):
         for key, title in zip(short_keys, short_titles):
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
-            # Восстанавливаем логические переводы строк для YAML flow scalars
+            # Restore logical line breaks for YAML flow scalars
             body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
             body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            story.append(_split_to_list_items(body))
+            for fl in _text_to_flowables(body):
+                story.append(fl)
             story.append(Spacer(1, 12))
     else:
         for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
-            # Восстанавливаем логические переводы строк для YAML flow scalars
+            # Restore logical line breaks for YAML flow scalars
             body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
             body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            story.append(_split_to_list_items(body))
+            for fl in _text_to_flowables(body):
+                story.append(fl)
             story.append(Spacer(1, 12))
     doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
+
+def _embed_output_intent(pdf, icc_bytes):
+    """Embeds OutputIntent with ICC profile for PDF/A-2."""
+    import pikepdf
+    from pikepdf import Name
+    
+    # Create ICC profile as stream
+    icc = pdf.make_stream(icc_bytes)
+    icc[Name("/N")] = 3  # RGB
+    icc[Name("/Alternate")] = Name("/DeviceRGB")
+    typer.secho(f"  Created ICC stream: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+
+    # Create OutputIntent as dictionary
+    oi = pikepdf.Dictionary()
+    oi[Name("/Type")] = Name("/OutputIntent")
+    oi[Name("/S")] = Name("/GTS_PDFA2")  # PDF/A-2 standard (can also use /GTS_PDFA1)
+    oi[Name("/OutputConditionIdentifier")] = "sRGB IEC61966-2.1"
+    oi[Name("/Info")] = "sRGB IEC61966-2.1 ICC profile"
+    oi[Name("/DestOutputProfile")] = icc
+    
+    # Add OutputIntent to document root
+    pdf.Root[Name("/OutputIntents")] = [oi]
+    typer.secho(f"  OutputIntent added to document root", fg=typer.colors.BLUE)
+
+def _to_pdfa(path: Path):
+    """Converts PDF to archival PDF/A-2b format."""
+    if not PIKEPDF_AVAILABLE:
+        typer.secho("pikepdf not installed, skipping PDF/A conversion", fg=typer.colors.YELLOW)
+        return
+    
+    typer.secho("Converting to PDF/A-2b...", fg=typer.colors.BLUE)
+    
+    try:
+        # Load ICC profile
+        icc_path = Path(__file__).parent / "annex4ac" / "resources" / "sRGB.icc"
+        if not icc_path.exists():
+            typer.secho(f"  ICC profile not found: {icc_path}", fg=typer.colors.RED)
+            return
+        icc_bytes = icc_path.read_bytes()
+        typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+        
+        with pikepdf.open(str(path), allow_overwriting_input=True) as pdf:
+            typer.secho(f"  Opened PDF: {len(pdf.pages)} pages", fg=typer.colors.BLUE)
+            
+            # Add XMP metadata for PDF/A
+            with pdf.open_metadata() as meta:
+                meta['pdfaid:part'] = "2"
+                meta['pdfaid:conformance'] = "B"
+                meta['dc:title'] = 'Annex IV Technical Documentation'
+                meta['dc:subject'] = 'EU AI Act Compliance'
+                meta['dc:creator'] = ['Annex4AC']
+            typer.secho(f"  Added XMP metadata: pdfaid:part=2, pdfaid:conformance=B", fg=typer.colors.BLUE)
+            
+            # Add basic document info
+            pdf.docinfo['/Title'] = 'Annex IV Technical Documentation'
+            pdf.docinfo['/Subject'] = 'EU AI Act Compliance'
+            pdf.docinfo['/Creator'] = 'Annex4AC'
+            typer.secho(f"  Added document info: Title, Subject, Creator", fg=typer.colors.BLUE)
+            
+            # Embed OutputIntent with ICC profile
+            _embed_output_intent(pdf, icc_bytes)
+            
+            # Save with PDF/A-2b compliance using new pikepdf 9+ approach
+            typer.secho(f"  Saving with PDF/A-2b compliance...", fg=typer.colors.BLUE)
+            pdf.save(str(path),
+                     preserve_pdfa=True,          # don't break PDF/A compliance
+                     fix_metadata_version=True,   # fix PDFVersion in XMP if present
+                     deterministic_id=True        # reproducible /ID for same input
+            )       
+        
+        # Check result
+        file_size = path.stat().st_size
+        typer.secho(f"  File size after conversion: {file_size:,} bytes", fg=typer.colors.BLUE)
+        
+        typer.secho(f"PDF/A-2b conversion completed: {path}", fg=typer.colors.GREEN)
+        
+    except Exception as e:
+        typer.secho(f"PDF/A conversion failed: {e}", fg=typer.colors.RED)
+        import traceback
+        typer.secho(f"Error details: {traceback.format_exc()}", fg=typer.colors.RED)
 
 def _default_tpl() -> str:
     return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
@@ -403,11 +562,11 @@ def _render_html(data: dict) -> str:
     from datetime import datetime
     from jinja2 import Environment, select_autoescape
 
-    # нормализуем строки
+    # normalize strings
     norm = {}
     for k, v in data.items():
         if isinstance(v, str):
-            # Восстанавливаем логические переводы строк для YAML flow scalars
+            # Restore logical line breaks for YAML flow scalars
             v = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', v)
             v = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', v, flags=re.I)
             norm[k] = fix_text(v)
@@ -417,10 +576,20 @@ def _render_html(data: dict) -> str:
     norm['schema_version']  = norm.get('_schema_version', 'unknown')
     
     env = Environment(autoescape=select_autoescape(['html', 'xml']))
-    env.filters['listify'] = listify  # добавляем фильтр
+    env.filters['listify'] = listify  # add filter
     
     template = env.from_string(_default_tpl())
     return template.render(**norm)
+
+def _check_freshness(dt, max_days=180, strict=False):
+    """Checks if the document is outdated."""
+    if datetime.now() - dt > timedelta(days=max_days):
+        msg = f"Technical doc is older than {max_days} days — update required (Art. 11)."
+        if strict:
+            typer.secho(f"[ERROR] {msg}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        else:
+            typer.secho(f"[WARNING] {msg}", fg=typer.colors.YELLOW)
 
 def _validate_payload(payload, sarif_path=None, yaml_path=None):
     """
@@ -614,7 +783,7 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
             raise typer.Exit(1)
 
 @app.command()
-def validate(input: Path = typer.Option(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file")):
+def validate(input: Path = typer.Argument(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file"), max_age: int = typer.Option(180, help="Max age in days for last_updated"), strict_age: bool = typer.Option(False, help="Exit 1 if document is older than max_age")):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     try:
         from ruamel.yaml import YAML
@@ -626,7 +795,8 @@ def validate(input: Path = typer.Option(..., exists=True, help="Your filled Anne
             for v in violations:
                 typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
-        AnnexIVSchema(**payload)  # triggers pydantic validation
+        model = AnnexIVSchema(**payload)  # triggers pydantic validation
+        _check_freshness(model.last_updated, max_days=max_age, strict=strict_age)
     except (ValidationError, Exception) as exc:
         typer.secho("Validation failed:\n" + str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
@@ -634,17 +804,40 @@ def validate(input: Path = typer.Option(..., exists=True, help="Your filled Anne
 
 @app.command()
 def generate(
-    input: Path = typer.Option(..., help="YAML input file"),
-    output: Path = typer.Option("annex_iv.pdf", help="Output file name"),
-    fmt: str = typer.Option("pdf", help="pdf | html | docx")
+    input: Path = typer.Argument(..., help="YAML input file"),
+    output: Path = typer.Option(None, help="Output file name"),
+    fmt: str = typer.Option("pdf", help="pdf | html | docx"),
+    pdfa: bool = typer.Option(False, help="Convert PDF to PDF/A-2b format for archival")
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
+    
+    # Calculate retention period for all formats
+    placed_on_market = payload.get("placed_on_market", datetime.now().date().isoformat())
+    # Handle different date types
+    if isinstance(placed_on_market, datetime):
+        pom = placed_on_market
+    elif isinstance(placed_on_market, date):
+        pom = datetime.combine(placed_on_market, datetime.min.time())
+    elif isinstance(placed_on_market, str):
+        if 'T' not in placed_on_market:
+            pom = datetime.fromisoformat(placed_on_market + "T00:00:00")
+        else:
+            pom = datetime.fromisoformat(placed_on_market)
+    else:
+        pom = datetime.now()
+    payload.setdefault("retention_until", (pom + relativedelta(years=10)).date().isoformat())
+    
+    # Automatically determine output filename
+    if output is None:
+        output = input.with_suffix(f".{fmt}")
     
     # License check for Pro features (PDF requires license)
     if fmt == "pdf":
         _check_license()
         _render_pdf(payload, output)
+        if pdfa:
+            _to_pdfa(output)
         typer.secho(f"PDF generated: {output}", fg=typer.colors.GREEN)
     elif fmt == "html":
         # HTML is free

@@ -6,3 +6,4 @@ include THIRD_PARTY_LICENSES.md
 include generate_keys.py
 include generate_license.py
 include LICENSE_SYSTEM.md 
+include annex4ac/resources/sRGB.icc

@@ -88,4 +88,21 @@ SOFTWARE.
 
 SIL Open Font License 1.1 (OFL)
 
-The full license text is available in annex4ac/fonts/OFL.txt. 
+The full license text is available in annex4ac/fonts/OFL.txt.
+
+---
+
+## sRGB ICC Profile
+
+sRGB IEC61966-2.1:1999
+
+Copyright (c) 1999 Hewlett-Packard Company
+
+This ICC profile is provided as-is without warranty of any kind. The sRGB color space is defined by IEC 61966-2-1:1999 and is freely available for use in software applications.
+
+The profile is included unmodified from the original source and may be redistributed provided that:
+1. The file remains unchanged
+2. This copyright notice is preserved
+3. The profile is used in accordance with the IEC 61966-2-1:1999 standard
+
+For more information, see: https://www.color.org/sRGB.xalter 

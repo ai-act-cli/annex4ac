@@ -34,6 +34,13 @@
         .section-title{ font-weight:600;font-size:1.2em;margin-bottom:0.5rem;}
         footer{margin-block:3rem 1rem;font-size:0.9em;color:#666;text-align:center;}
         ol[type="a"]{ list-style-type: lower-alpha; }
+        ol.alpha { 
+            list-style: lower-alpha; 
+            counter-reset: item; 
+        }
+        ol.alpha > li::marker { 
+            content: "(" counter(list-item, lower-alpha) ") "; 
+        }
         h1,h2,h3{ page-break-after: avoid; }
         .section-content li{ page-break-inside: avoid; }
         @media (max-width:768px){
@@ -45,6 +52,9 @@
     <h1>Annex IV Technical Documentation</h1>
     <p><strong>Generated:</strong> {{ generation_date }}</p>
     <p><strong>Schema Version:</strong> {{ schema_version }}</p>
+    {% if retention_until %}
+    <p><strong>Retention Until:</strong> {{ retention_until }}</p>
+    {% endif %}
     
     <div class="section">
         <div class="section-title">1. System Overview</div>
