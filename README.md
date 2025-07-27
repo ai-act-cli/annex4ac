@@ -24,6 +24,7 @@ SaaS/PDF unlocks with a licence key .
 * **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
 * **Freshness validation** – warns or fails when documentation is older than specified threshold (Article 11 compliance).
 * **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
+* **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
 
 ---
 
@@ -40,50 +41,50 @@ SaaS/PDF unlocks with a licence key .
 ## 🚀 Quick‑start
 
 ```bash
-# 1 Install (Python 3.9+)
+# 1 Install (Python 3.9+)
 pip install annex4ac
 
-# 2 Pull the latest Annex IV layout
+# 2 Pull the latest Annex IV layout
 annex4ac fetch-schema annex_template.yaml
 
-# 3 Fill in the YAML → validate
+# 3 Fill in the YAML → validate
 cp annex_template.yaml my_annex.yaml
 $EDITOR my_annex.yaml
-annex4ac validate -i my_annex.yaml   # "Validation OK!" or exit 1
+annex4ac validate my_annex.yaml   # "Validation OK!" or exit 1
 
 # 4 Generate output (PDF requires license)
 # HTML (free)
-annex4ac generate -i my_annex.yaml -o docs/annex_iv.html --fmt html
+annex4ac generate my_annex.yaml --output annex_iv.html --fmt html
 
 # DOCX (free)  
-annex4ac generate -i my_annex.yaml -o docs/annex_iv.docx --fmt docx
+annex4ac generate my_annex.yaml --output annex_iv.docx --fmt docx
 
 # PDF (Pro - requires license)
 export ANNEX4AC_LICENSE="your_jwt_token_here"
-annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf --fmt pdf
+annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 ```
 
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
 
-> **Hint :** You only need to edit the YAML once per model version—CI keeps it green.
+> **Hint :** You only need to edit the YAML once per model version—CI keeps it green.
 
 ---
 
-## 🗂 Required YAML fields (June 2024 format)
+## 🗂 Required YAML fields (June 2024 format)
 
-| Key                      | Annex IV § |
+| Key                      | Annex IV § |
 | ------------------------ | ---------- |
 | `risk_level`             | —          | "high", "limited", "minimal" — determines required sections |
 | `use_cases`              | —          | List of tags (Annex III) for auto high-risk. Acceptable values: employment_screening, biometric_id, critical_infrastructure, education_scoring, justice_decision, migration_control |
-| `system_overview`        |  1         |
-| `development_process`    |  2         |
-| `system_monitoring`      |  3         |
-| `performance_metrics`    |  4         |
-| `risk_management`        |  5         |
-| `changes_and_versions`   |  6         |
-| `standards_applied`      |  7         |
-| `compliance_declaration` |  8         |
-| `post_market_plan`       |  9         |
+| `system_overview`        |  1         |
+| `development_process`    |  2         |
+| `system_monitoring`      |  3         |
+| `performance_metrics`    |  4         |
+| `risk_management`        |  5         |
+| `changes_and_versions`   |  6         |
+| `standards_applied`      |  7         |
+| `compliance_declaration` |  8         |
+| `post_market_plan`       |  9         |
 | `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines if the PDF will be generated in short SME form automatically. |
 | `placed_on_market`       | —          | ISO datetime when the AI system was placed on market (required for retention calculation). |
 | `last_updated`           | —          | ISO datetime of last documentation update (required for freshness validation). |
@@ -94,8 +95,8 @@ annex4ac generate -i my_annex.yaml -o docs/annex_iv.pdf --fmt pdf
 
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
-| `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
-| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--max-age` for freshness validation, and `--strict-age` for strict age checking.             |
+| `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
+| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--max-age` for freshness validation, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
 
 Run `annex4ac --help` for full CLI.
@@ -111,16 +112,24 @@ Lists are automatically formatted according to EU drafting rules:
 - Proper punctuation with semicolons and final periods
 
 ### Retention and Freshness Tracking
-- **10-year retention**: Automatic calculation and metadata embedding
+- **10-year retention**: Automatic calculation and metadata embedding according to Article 18(1)
 - **Freshness validation**: `--max-age 180` (default) or `--strict-age` for CI enforcement
 - **Compliance**: Meets Article 11 (up-to-date) and Article 18 (retention) requirements
+- **Legal accuracy**: Retention period calculated from `placed_on_market` date
+
+### Unified Text Processing
+All formats (PDF/HTML/DOCX) now use consistent text processing:
+- Automatic handling of escaped characters (`\\n` → `\n`)
+- Proper list detection and formatting
+- YAML flow scalar restoration
+- EU-compliant punctuation
 
 ### PDF/A-2b Archival Support
 Enable archival PDF generation with:
 
 ```bash
 # Generate PDF/A-2b for long-term preservation
-annex4ac generate -i my_annex.yaml --fmt pdf --pdfa
+annex4ac generate my_annex.yaml --fmt pdf --pdfa
 
 # PDF/A-2b includes:
 # - Embedded sRGB ICC profile
@@ -130,10 +139,6 @@ annex4ac generate -i my_annex.yaml --fmt pdf --pdfa
 ```
 
 **Legal compliance**: PDF/A-2b format ensures documents remain accessible and visually identical for decades, meeting archival requirements under Article 18 of Regulation 2024/1689.
-```bash
-export ANNEX4AC_PDFA=1
-annex4ac generate -i my_annex.yaml -o annex_iv.pdf --fmt pdf
-```
 
 ---
 
@@ -166,10 +171,10 @@ To generate PDF in Pro mode, a license is required (JWT, RSA signature). The ANN
 
 ---
 
-## 🐙 GitHub Action example
+## 🐙 GitHub Action example
 
 ```yaml
-name: Annex IV gate
+name: Annex IV gate
 on: [pull_request]
 
 jobs:
@@ -181,7 +186,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install annex4ac
-      - run: annex4ac validate -i spec/model.yaml
+      - run: annex4ac validate model.yaml
 ```
 
 Add `ANNEX4AC_LICENSE` as a secret to use PDF export in CI.
@@ -218,10 +223,10 @@ python annex4ac.py --help
 | Tier       | Price           | Features                                                     |
 | ---------- | --------------- | ------------------------------------------------------------ |
 | Community  | **Free**        | `fetch-schema`, `validate`, unlimited public repos           |
-| Pro        | **€15 / month** | PDF generation, version history (future SaaS), email support |
-| Enterprise | Custom          | Self‑hosted Docker, SLA 99.9 %, custom sections              |
+| Pro        | **€15 / month** | PDF generation, version history (future SaaS), email support |
+| Enterprise | Custom          | Self‑hosted Docker, SLA 99.9 %, custom sections              |
 
-Pay once, use anywhere – CLI, GitHub Action, future REST API.
+Pay once, use anywhere – CLI, GitHub Action, future REST API.
 
 ---
 

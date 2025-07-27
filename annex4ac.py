@@ -20,9 +20,9 @@ Dependencies (add these to requirements.txt or pyproject):
 Usage examples
 --------------
 $ pip install annex4ac  # once published on PyPI
-$ annex4ac fetch-schema  > annex_schema.yaml        # refresh local schema
-$ annex4ac validate -i my_model.yaml                # CI gate (free)
-$ annex4ac generate -i my_model.yaml -o my_annex.pdf # Pro only
+$ annex4ac fetch-schema  > annex_schema.yaml             # refresh local schema
+$ annex4ac validate my_model.yaml                        # CI gate (free)
+$ annex4ac generate my_model.yaml --output my_annex.pdf  # Pro only
 
 The code is intentionally compact; production users should add logging, retries and
 exception handling as required.
@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Dict, Literal, List
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
+from dateutil.parser import parse as parse_dt
 
 import requests
 from bs4 import BeautifulSoup
@@ -59,6 +60,43 @@ from docx_generator import render_docx
 import re
 from ftfy import fix_text
 from markupsafe import escape, Markup
+from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION
+
+def _parse_iso_date(val):
+    """Parse ISO date string or datetime object to datetime."""
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, date):
+        return datetime.combine(val, datetime.min.time())
+    if isinstance(val, str) and val.strip():
+        # допускаем без "T"
+        return parse_dt(val if 'T' in val else val + "T00:00:00")
+    return datetime.now()
+
+def _build_doc_meta(payload: dict) -> dict:
+    """Build unified document metadata for all formats."""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    meta = {}
+    for label, key in DOC_CTRL_FIELDS:
+        if key == "generation_date":
+            meta[key] = now
+        elif key == "_schema_version":
+            sv = payload.get(key, SCHEMA_VERSION)
+            if isinstance(sv, str) and len(sv) == 8 and sv.isdigit():
+                sv = f"{sv[:4]}-{sv[4:6]}-{sv[6:8]}"
+            meta[key] = sv
+        elif key == "retention_until":
+            # Calculate retention period according to Art. 18(1): 10 years after placing on market/put into service
+            placed_on_market = payload.get("placed_on_market") or payload.get("put_into_service")
+            if placed_on_market:
+                pom = _parse_iso_date(placed_on_market)
+                retention = (pom + relativedelta(years=10)).date().isoformat()
+                meta[key] = retention
+            else:
+                meta[key] = "—"
+        else:
+            meta[key] = payload.get(key, "—")
+    return meta
 
 # Attempt to import pikepdf for PDF/A support
 try:
@@ -133,34 +171,7 @@ AI_ACT_ANNEX_IV_PDF = (
     "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ%3AL_202401689"
 )
 
-# Mapping of Annex IV sections → canonical YAML keys (updated to 9 items, June 2024)
-_SECTION_KEYS = [
-    "system_overview",
-    "development_process",
-    "system_monitoring",
-    "performance_metrics",
-    "risk_management",
-    "changes_and_versions",
-    "standards_applied",
-    "compliance_declaration",
-    "post_market_plan",
-]
-
-# Official Annex IV section titles (verbatim, 2024, full)
-_SECTION_TITLES = [
-    "1. A general description of the AI system including:",
-    "2. A detailed description of the elements of the AI system and of the process for its development, including:",
-    "3. Detailed information about the monitoring, functioning and control of the AI system, in particular with regard to:",
-    "4. A description of the appropriateness of the performance metrics for the specific AI system:",
-    "5. A detailed description of the risk management system in accordance with Article 9:",
-    "6. A description of relevant changes made by the provider to the system through its lifecycle:",
-    "7. A list of the harmonised standards applied in full or in part the references of which have been published in the Official Journal of the European Union; where no such harmonised standards have been applied, a detailed description of the solutions adopted to meet the requirements set out in Chapter III, Section 2, including a list of other relevant standards and technical specifications applied:",
-    "8. A copy of the EU declaration of conformity referred to in Article 47:",
-    "9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):",
-]
-
-# Unified section mapping for all formats
-_SECTION_MAPPING = list(zip(_SECTION_TITLES, _SECTION_KEYS))
+# Section mapping imported from constants.py
 
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
 FONTS_DIR = Path(__file__).parent / "fonts"
@@ -253,8 +264,8 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
     if not content:
         return {}
 
-    # Use the global _SECTION_KEYS for correct mapping
-    section_keys = _SECTION_KEYS
+    # Use the global SECTION_MAPPING for correct mapping
+    section_keys = [key for _, key in SECTION_MAPPING]
 
     result = {}
     current_key = None
@@ -275,7 +286,7 @@ def _parse_annex_iv(html: str) -> Dict[str, str]:
                 current_key = section_keys[section_idx]
                 section_idx += 1
             else:
-                raise ValueError("Annex IV structure on the website has changed: more sections than expected! Please update _SECTION_KEYS and the parser.")
+                raise ValueError("Annex IV structure on the website has changed: more sections than expected! Please update SECTION_MAPPING and the parser.")
             buffer = [text]
         else:
             # Subpoints and details
@@ -291,7 +302,7 @@ def _write_yaml(data: Dict[str, str], path: Path):
     # Dump YAML with an empty line before each key (except the first)
     with path.open("w", encoding="utf-8") as f:
         first = True
-        for key in _SECTION_KEYS:
+        for _, key in SECTION_MAPPING:
             if key in data:
                 if not first:
                     f.write("\n")
@@ -408,6 +419,15 @@ def _get_heading_style():
     )
     return style
 
+def _doc_control_pdf(meta: dict):
+    """Returns list of Flowable for PDF 'Document control' block."""
+    flows = [Paragraph("Document control", _get_heading_style())]
+    for label, key in DOC_CTRL_FIELDS:
+        val = meta.get(key, "—")
+        flows.append(Paragraph(f"<b>{label}:</b> {val}", _get_body_style()))
+    flows.append(Spacer(1, 12))
+    return flows
+
 def _header(canvas, doc):
     import datetime
     canvas.saveState()
@@ -435,13 +455,15 @@ def _header_and_footer(canvas, doc):
     _header(canvas, doc)
     _footer(canvas, doc)
 
-def _render_pdf(payload: dict, out_pdf: Path):
+def _render_pdf(payload: dict, out_pdf: Path, meta: dict):
     doc = SimpleDocTemplate(str(out_pdf), pagesize=A4,
                             leftMargin=25*mm, rightMargin=25*mm,
                             topMargin=20*mm, bottomMargin=20*mm)  # top/bottom margins 20 mm
     doc._schema_version = payload.get("_schema_version", "unknown")
     doc._payload = payload
     story = []
+    # Insert metadata block
+    story.extend(_doc_control_pdf(meta))
     sme_short = payload.get("enterprise_size", "").lower() == "sme"
     if sme_short:
         short_keys = [
@@ -451,26 +473,46 @@ def _render_pdf(payload: dict, out_pdf: Path):
             "post_market_plan"
         ]
         short_titles = [
-            t for k, t in zip(_SECTION_KEYS, _SECTION_TITLES) if k in short_keys
+            title for title, key in SECTION_MAPPING if key in short_keys
         ]
         for key, title in zip(short_keys, short_titles):
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
+            # Fix text encoding issues
+            body = fix_text(body)
+            # Unescape \n and normalize line breaks
+            body = body.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
             # Restore logical line breaks for YAML flow scalars
             body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
             body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            for fl in _text_to_flowables(body):
-                story.append(fl)
+            # Fix double line breaks before list markers
+            body = re.sub(r'\n\s*\n\s*([-•*])', r'\n\1', body)
+            # Split into paragraphs and process each separately
+            paragraphs = re.split(r'\n{2,}', body)
+            for para in paragraphs:
+                if para.strip():
+                    for fl in _text_to_flowables(para.strip()):
+                        story.append(fl)
             story.append(Spacer(1, 12))
     else:
-        for key, title in zip(_SECTION_KEYS, _SECTION_TITLES):
+        for title, key in SECTION_MAPPING:
             story.append(Paragraph(title, _get_heading_style()))
             body = payload.get(key, "—")
+            # Fix text encoding issues
+            body = fix_text(body)
+            # Unescape \n and normalize line breaks
+            body = body.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
             # Restore logical line breaks for YAML flow scalars
             body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
             body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            for fl in _text_to_flowables(body):
-                story.append(fl)
+            # Fix double line breaks before list markers
+            body = re.sub(r'\n\s*\n\s*([-•*])', r'\n\1', body)
+            # Split into paragraphs and process each separately
+            paragraphs = re.split(r'\n{2,}', body)
+            for para in paragraphs:
+                if para.strip():
+                    for fl in _text_to_flowables(para.strip()):
+                        story.append(fl)
             story.append(Spacer(1, 12))
     doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
 
@@ -557,7 +599,7 @@ def _to_pdfa(path: Path):
 def _default_tpl() -> str:
     return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
 
-def _render_html(data: dict) -> str:
+def _render_html(data: dict, meta: dict) -> str:
     """Render HTML from template with data."""
     from datetime import datetime
     from jinja2 import Environment, select_autoescape
@@ -566,20 +608,53 @@ def _render_html(data: dict) -> str:
     norm = {}
     for k, v in data.items():
         if isinstance(v, str):
+            # Fix text encoding issues
+            v = fix_text(v)
+            # Unescape \n and normalize line breaks
+            v = v.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
             # Restore logical line breaks for YAML flow scalars
             v = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', v)
             v = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', v, flags=re.I)
-            norm[k] = fix_text(v)
+            norm[k] = v
         else:
             norm[k] = v
-    norm['generation_date'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    norm['schema_version']  = norm.get('_schema_version', 'unknown')
+    # Use passed metadata
+    meta_lines = [f"<p><strong>{label}:</strong> {meta[key]}</p>" for label, key in DOC_CTRL_FIELDS]
+    norm['__doc_control_html'] = '<section id="doc-control"><h2>Document control</h2>' + "\n".join(meta_lines) + "</section>"
     
     env = Environment(autoescape=select_autoescape(['html', 'xml']))
     env.filters['listify'] = listify  # add filter
     
     template = env.from_string(_default_tpl())
-    return template.render(**norm)
+    html = template.render(**norm)
+    
+    # Insert block after the title but before the first section
+    title_end = html.find('</h1>')
+    if title_end != -1:
+        insert_pos = title_end + 6  # after </h1>
+        # Remove duplicate metadata from template
+        # Find and remove lines with "Generated:", "Schema Version:", "Retention Until:"
+        lines = html.split('\n')
+        filtered_lines = []
+        skip_next = False
+        for line in lines:
+            if any(skip in line for skip in ['<p><strong>Generated:</strong>', '<p><strong>Schema Version:</strong>', '<p><strong>Retention Until:</strong>']):
+                skip_next = True
+                continue
+            if skip_next and line.strip() == '':
+                skip_next = False
+                continue
+            if skip_next:
+                skip_next = False
+                continue
+            filtered_lines.append(line)
+        
+        html = '\n'.join(filtered_lines)
+        title_end = html.find('</h1>')
+        if title_end != -1:
+            insert_pos = title_end + 6
+            return html[:insert_pos] + norm['__doc_control_html'] + html[insert_pos:]
+    return norm['__doc_control_html'] + html
 
 def _check_freshness(dt, max_days=180, strict=False):
     """Checks if the document is outdated."""
@@ -812,21 +887,8 @@ def generate(
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
     
-    # Calculate retention period for all formats
-    placed_on_market = payload.get("placed_on_market", datetime.now().date().isoformat())
-    # Handle different date types
-    if isinstance(placed_on_market, datetime):
-        pom = placed_on_market
-    elif isinstance(placed_on_market, date):
-        pom = datetime.combine(placed_on_market, datetime.min.time())
-    elif isinstance(placed_on_market, str):
-        if 'T' not in placed_on_market:
-            pom = datetime.fromisoformat(placed_on_market + "T00:00:00")
-        else:
-            pom = datetime.fromisoformat(placed_on_market)
-    else:
-        pom = datetime.now()
-    payload.setdefault("retention_until", (pom + relativedelta(years=10)).date().isoformat())
+    # Build unified metadata for all formats (includes retention calculation)
+    meta = _build_doc_meta(payload)
     
     # Automatically determine output filename
     if output is None:
@@ -835,18 +897,18 @@ def generate(
     # License check for Pro features (PDF requires license)
     if fmt == "pdf":
         _check_license()
-        _render_pdf(payload, output)
+        _render_pdf(payload, output, meta)
         if pdfa:
             _to_pdfa(output)
         typer.secho(f"PDF generated: {output}", fg=typer.colors.GREEN)
     elif fmt == "html":
         # HTML is free
-        html_content = _render_html(payload)
+        html_content = _render_html(payload, meta)
         output.write_text(html_content, encoding='utf-8')
         typer.secho(f"HTML generated: {output}", fg=typer.colors.GREEN)
     elif fmt == "docx":
         # DOCX is free
-        render_docx(payload, output)
+        render_docx(payload, output, meta)
         typer.secho(f"DOCX generated: {output}", fg=typer.colors.GREEN)
     else:
         raise ValueError(f"Unknown format: {fmt}")

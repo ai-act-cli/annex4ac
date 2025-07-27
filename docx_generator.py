@@ -27,18 +27,7 @@ BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
 SUBPOINT_RE = re.compile(r'^\(([a-z])\)\s+', re.I)  # (a), (b)...
 PARA_SPLIT = re.compile(r'\n{2,}')  # paragraphs
 
-# Annex IV section mapping
-_SECTION_MAPPING = [
-    ("1. A general description of the AI system including:", "system_overview"),
-    ("2. A detailed description of the elements of the AI system and of the process for its development, including:", "development_process"),
-    ("3. Detailed information about the monitoring, functioning and control of the AI system, in particular with regard to:", "system_monitoring"),
-    ("4. A description of the appropriateness of the performance metrics for the specific AI system:", "performance_metrics"),
-    ("5. A detailed description of the risk management system in accordance with Article 9:", "risk_management"),
-    ("6. A description of relevant changes made by the provider to the system through its lifecycle:", "changes_and_versions"),
-    ("7. A list of the harmonised standards applied in full or in part the references of which have been published in the Official Journal of the European Union; where no such harmonised standards have been applied, a detailed description of the solutions adopted to meet the requirements set out in Chapter III, Section 2, including a list of other relevant standards and technical specifications applied:", "standards_applied"),
-    ("8. A copy of the EU declaration of conformity referred to in Article 47:", "compliance_declaration"),
-    ("9. A detailed description of the system in place to evaluate the AI-system performance in the post-market phase in accordance with Article 72, including the post-market monitoring plan referred to in Article 72(3):", "post_market_plan"),
-]
+from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION
 
 
 def _enable_auto_update_fields(doc):
@@ -157,7 +146,7 @@ def _apply_numbering(p, num_id, left=720, hanging=360):
     pPr.append(ind)
 
 
-def render_docx(payload: dict, output_path: Path):
+def render_docx(payload: dict, output_path: Path, meta: dict):
     """
     Main function for generating Annex IV DOCX document.
     
@@ -226,18 +215,25 @@ def render_docx(payload: dict, output_path: Path):
     # --- Title page ---
     title = doc.add_heading('Annex IV Technical Documentation', 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    for line in (
-        f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
-        f"Schema version: {payload.get('_schema_version','unknown')}",
-        f"Risk level: {payload.get('risk_level','unknown')}",
-        f"Enterprise size: {payload.get('enterprise_size','unknown')}",
-    ):
-        doc.add_paragraph(line)
+
+    # --- Document control block ---
+    # Use passed metadata (ensure generation_date is current)
+    meta = meta.copy()
+    meta["generation_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    doc.add_heading('Document control', level=1)
+    table = doc.add_table(rows=0, cols=2)
+    table.autofit = True
+    for label, key in DOC_CTRL_FIELDS:
+        row_cells = table.add_row().cells
+        row_cells[0].text = label
+        row_cells[1].text = str(meta.get(key, "—"))
+    doc.add_paragraph()  # Empty line after table
 
 
     # --- Main Annex IV sections ---
     # bookmark_counter = 0
-    for heading, key in _SECTION_MAPPING:
+    for heading, key in SECTION_MAPPING:
         raw = payload.get(key, "")
         if not raw:
             continue
@@ -306,4 +302,18 @@ if __name__ == "__main__":
     ap.add_argument("payload_json")
     ap.add_argument("output_docx")
     args = ap.parse_args()
-    render_docx(json.load(open(args.payload_json)), Path(args.output_docx)) 
+    payload = json.load(open(args.payload_json))
+    # Build metadata for standalone usage
+    from constants import DOC_CTRL_FIELDS, SCHEMA_VERSION
+    meta = {}
+    for label, key in DOC_CTRL_FIELDS:
+        if key == "generation_date":
+            meta[key] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elif key == "_schema_version":
+            sv = payload.get(key, SCHEMA_VERSION)
+            if isinstance(sv, str) and len(sv) == 8 and sv.isdigit():
+                sv = f"{sv[:4]}-{sv[4:6]}-{sv[6:8]}"
+            meta[key] = sv
+        else:
+            meta[key] = payload.get(key, "—")
+    render_docx(payload, Path(args.output_docx), meta) 
