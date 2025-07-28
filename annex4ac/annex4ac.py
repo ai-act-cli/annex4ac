@@ -53,14 +53,14 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from policy.annex4ac_validate import validate_payload
+from .policy.annex4ac_validate import validate_payload
 import unicodedata
-from docx_generator import render_docx
+from .docx_generator import render_docx
 
 import re
 from ftfy import fix_text
 from markupsafe import escape, Markup
-from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
+from .constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
 
 def _parse_iso_date(val):
     """Parse ISO date string or datetime object to datetime."""
@@ -95,7 +95,9 @@ def _build_doc_meta(payload: dict) -> dict:
             else:
                 meta[key] = "—"
         else:
-            meta[key] = payload.get(key, "—")
+            # Show "—" for empty values
+            value = payload.get(key, "")
+            meta[key] = value if value else "—"
     return meta
 
 # Attempt to import pikepdf for PDF/A support
@@ -361,11 +363,49 @@ def _write_yaml(data: Dict[str, str], path: Path):
                     f.write("\n")
                 yaml.dump({key: data[key]}, f, allow_unicode=True, default_flow_style=False)
                 first = False
-        # Always write enterprise_size, risk_level, use_cases, _schema_version
-        yaml.dump({"enterprise_size": data.get("enterprise_size", "mid")}, f, allow_unicode=True, default_flow_style=False)
-        yaml.dump({"risk_level": data.get("risk_level", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        # Add empty line before enterprise_size
+        f.write("\n")
+        
+        # Always write all mandatory fields with proper defaults and examples
+        f.write("\n# enterprise_size: sme | mid | large (Art. 11 exemption)\n")
+        yaml.dump({"enterprise_size": data.get("enterprise_size", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        # Get full list of use_cases from Annex III
+        try:
+            full_use_cases = fetch_annex3_tags()
+            use_cases_list = sorted(list(full_use_cases))
+            if use_cases_list:
+                f.write(f"\n# use_cases: list of tags (e.g., ['biometric_id', 'critical_infrastructure'])\n")
+                f.write(f"# Use cases that make AI system high-risk (from Annex III):\n")
+                f.write(f"#   {', '.join(use_cases_list)}\n")
+            else:
+                # Fallback to known tags from the schema
+                known_tags = ["biometric_id", "critical_infrastructure", "education_scoring", "employment_screening", "essential_services", "law_enforcement", "migration_control", "justice_decision"]
+                f.write(f"\n# use_cases: list of tags (e.g., ['biometric_id', 'critical_infrastructure'])\n")
+                f.write(f"# Use cases that make AI system high-risk (from Annex III):\n")
+                f.write(f"#   {', '.join(known_tags[:4])},\n")
+                f.write(f"#   {', '.join(known_tags[4:])}\n")
+        except Exception:
+            # Fallback to known tags from the schema
+            known_tags = ["biometric_id", "critical_infrastructure", "education_scoring", "employment_screening", "essential_services", "law_enforcement", "migration_control", "justice_decision"]
+            f.write(f"\n# use_cases: list of tags (e.g., ['biometric_id', 'critical_infrastructure'])\n")
+            f.write(f"# Use cases that make AI system high-risk (from Annex III):\n")
+            f.write(f"#   {', '.join(known_tags[:4])},\n")
+            f.write(f"#   {', '.join(known_tags[4:])}\n")
         yaml.dump({"use_cases": data.get("use_cases", [])}, f, allow_unicode=True, default_flow_style=False)
-        yaml.dump({"_schema_version": data.get("_schema_version", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        f.write("\n# risk_level: high | limited | minimal (Art. 6 / Annex III) - AI system risk classification\n")
+        yaml.dump({"risk_level": data.get("risk_level", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        f.write("\n# placed_on_market: ISO datetime (e.g., 2024-01-15T10:30:00) - when AI system was first placed on market\n")
+        yaml.dump({"placed_on_market": data.get("placed_on_market", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        f.write("\n# last_updated: this document last updated (ISO datetime, e.g., 2024-07-28T14:20:00)\n")
+        yaml.dump({"last_updated": data.get("last_updated", "")}, f, allow_unicode=True, default_flow_style=False)
+        
+        f.write("\n# _schema_version: automatically set\n")
+        yaml.dump({"_schema_version": data.get("_schema_version", SCHEMA_VERSION)}, f, allow_unicode=True, default_flow_style=False)
 
 
 def _punctuate(items: list[str]) -> list[str]:
@@ -504,7 +544,7 @@ def _header(canvas, doc):
         except Exception:
             schema = "unknown"
     canvas.drawRightString(A4[0]-25*mm, A4[1]-15*mm,
-        f"Annex IV — Technical documentation referred to in Article 11(1) — v{schema}")
+        f"Annex IV — Technical documentation referred to in Article 11(1)")
     canvas.restoreState()
 
 def _footer(canvas, doc):
@@ -720,10 +760,12 @@ def _render_html(data: dict, meta: dict) -> str:
             return html[:insert_pos] + norm['__doc_control_html'] + html[insert_pos:]
     return norm['__doc_control_html'] + html
 
-def _check_freshness(dt, max_days=180, strict=False):
-    """Checks if the document is outdated."""
+def _check_freshness(dt, max_days=None, strict=False):
+    """Heuristic staleness check. max_days=None/<=0 disables it."""
+    if not max_days or max_days <= 0:
+        return
     if datetime.now() - dt > timedelta(days=max_days):
-        msg = f"Technical doc is older than {max_days} days — update required (Art. 11)."
+        msg = f"Technical doc is older than {max_days} days — consider updating (Art. 11 'doc must be kept up-to-date')."
         if strict:
             typer.secho(f"[ERROR] {msg}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
@@ -824,7 +866,7 @@ def _check_license():
 
     # 2) Public key dictionary (ready for rotation)
     pub_map = {
-        "2025-01": Path(__file__).parent.joinpath("annex4ac", "lic_pub.pem").read_text()
+        "2025-01": Path(__file__).parent.joinpath("lic_pub.pem").read_text()
     }
 
     key = pub_map.get(kid)
@@ -915,8 +957,11 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
             raise typer.Exit(1)
 
 @app.command()
-def validate(input: Path = typer.Argument(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file"), max_age: int = typer.Option(180, help="Max age in days for last_updated"), strict_age: bool = typer.Option(False, help="Exit 1 if document is older than max_age")):
+def validate(input: Path = typer.Argument(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file"), stale_after: int = typer.Option(0, help="Warn if last_updated older than N days (0=off)", show_default=False), strict_age: bool = typer.Option(False, help="Exit 1 if stale_after is exceeded")):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
+    # Check environment variable for default stale_after
+    if stale_after == 0:
+        stale_after = int(os.getenv("ANNEX4AC_STALE_AFTER", "0"))
     try:
         from ruamel.yaml import YAML
         yaml_ruamel = YAML(typ="rt")
@@ -928,7 +973,7 @@ def validate(input: Path = typer.Argument(..., exists=True, help="Your filled An
                 typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
         model = AnnexIVSchema(**payload)  # triggers pydantic validation
-        _check_freshness(model.last_updated, max_days=max_age, strict=strict_age)
+        _check_freshness(model.last_updated, max_days=stale_after, strict=strict_age)
     except (ValidationError, Exception) as exc:
         typer.secho("Validation failed:\n" + str(exc), fg=typer.colors.RED, err=True)
         raise typer.Exit(1)

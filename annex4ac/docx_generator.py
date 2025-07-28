@@ -27,7 +27,7 @@ BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
 SUBPOINT_RE = re.compile(r'^\(([a-z])\)\s+', re.I)  # (a), (b)...
 PARA_SPLIT = re.compile(r'\n{2,}')  # paragraphs
 
-from constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION
+from .constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION
 
 
 def _enable_auto_update_fields(doc):
