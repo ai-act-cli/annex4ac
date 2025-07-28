@@ -229,9 +229,18 @@ def listify(text: str) -> Markup:
 # Constants
 # -----------------------------------------------------------------------------
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
-FONTS_DIR = Path(__file__).parent / "fonts"
-pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf")))
-pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "LiberationSans-Bold.ttf")))
+try:
+    import importlib.resources as pkg_resources
+    # Try to use importlib.resources for proper package access
+    regular_font_path = pkg_resources.files("annex4ac.fonts").joinpath("LiberationSans-Regular.ttf")
+    bold_font_path = pkg_resources.files("annex4ac.fonts").joinpath("LiberationSans-Bold.ttf")
+    pdfmetrics.registerFont(TTFont("LiberationSans", str(regular_font_path)))
+    pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(bold_font_path)))
+except Exception:
+    # Fallback to direct file access
+    FONTS_DIR = Path(__file__).parent / "fonts"
+    pdfmetrics.registerFont(TTFont("LiberationSans", str(FONTS_DIR / "LiberationSans-Regular.ttf")))
+    pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(FONTS_DIR / "LiberationSans-Bold.ttf")))
 
 # -----------------------------------------------------------------------------
 # Pydantic schema mirrors Annex IV – update automatically during fetch.
@@ -246,7 +255,7 @@ class AnnexIVSection(BaseModel):
     body: str = Field(..., description="Verbatim text of the section")
 
 class AnnexIVSchema(BaseModel):
-    enterprise_size: Literal["sme", "mid", "large"]  # new — Art. 11 exemption
+    enterprise_size: Literal["sme", "mid", "large"]  # Art. 11 exemption - all sizes get full 9 sections
     risk_level: Literal["high", "limited", "minimal"]
     use_cases: List[str] = []  # list of tags from Annex III
     system_overview: str
@@ -568,56 +577,27 @@ def _render_pdf(payload: dict, out_pdf: Path, meta: dict):
     story = []
     # Insert metadata block
     story.extend(_doc_control_pdf(meta))
-    sme_short = payload.get("enterprise_size", "").lower() == "sme"
-    if sme_short:
-        short_keys = [
-            "system_overview",
-            "development_process",
-            "risk_management",
-            "post_market_plan"
-        ]
-        short_titles = [
-            title for title, key in SECTION_MAPPING if key in short_keys
-        ]
-        for key, title in zip(short_keys, short_titles):
-            story.append(Paragraph(title, _get_heading_style()))
-            body = payload.get(key, "—")
-            # Fix text encoding issues
-            body = fix_text(body)
-            # Unescape \n and normalize line breaks
-            body = body.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
-            # Restore logical line breaks for YAML flow scalars
-            body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
-            body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            # Fix double line breaks before list markers
-            body = re.sub(r'\n\s*\n\s*([-•*])', r'\n\1', body)
-            # Split into paragraphs and process each separately
-            paragraphs = re.split(r'\n{2,}', body)
-            for para in paragraphs:
-                if para.strip():
-                    for fl in _text_to_flowables(para.strip()):
-                        story.append(fl)
-            story.append(Spacer(1, 12))
-    else:
-        for title, key in SECTION_MAPPING:
-            story.append(Paragraph(title, _get_heading_style()))
-            body = payload.get(key, "—")
-            # Fix text encoding issues
-            body = fix_text(body)
-            # Unescape \n and normalize line breaks
-            body = body.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
-            # Restore logical line breaks for YAML flow scalars
-            body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
-            body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
-            # Fix double line breaks before list markers
-            body = re.sub(r'\n\s*\n\s*([-•*])', r'\n\1', body)
-            # Split into paragraphs and process each separately
-            paragraphs = re.split(r'\n{2,}', body)
-            for para in paragraphs:
-                if para.strip():
-                    for fl in _text_to_flowables(para.strip()):
-                        story.append(fl)
-            story.append(Spacer(1, 12))
+    
+    # Generate all 9 sections for all enterprise sizes (SME, MID, LARGE)
+    for title, key in SECTION_MAPPING:
+        story.append(Paragraph(title, _get_heading_style()))
+        body = payload.get(key, "—")
+        # Fix text encoding issues
+        body = fix_text(body)
+        # Unescape \n and normalize line breaks
+        body = body.replace('\\r\\n', '\n').replace('\\r', '\n').replace('\\n', '\n')
+        # Restore logical line breaks for YAML flow scalars
+        body = re.sub(r'\s+(?=(?:[-•*]\s))', '\n', body)
+        body = re.sub(r'\s+(?=\([a-z]\)\s+)', '\n', body, flags=re.I)
+        # Fix double line breaks before list markers
+        body = re.sub(r'\n\s*\n\s*([-•*])', r'\n\1', body)
+        # Split into paragraphs and process each separately
+        paragraphs = re.split(r'\n{2,}', body)
+        for para in paragraphs:
+            if para.strip():
+                for fl in _text_to_flowables(para.strip()):
+                    story.append(fl)
+        story.append(Spacer(1, 12))
     doc.build(story, onFirstPage=_header_and_footer, onLaterPages=_header_and_footer)
 
 def _embed_output_intent(pdf, icc_bytes):
@@ -652,13 +632,19 @@ def _to_pdfa(path: Path):
     typer.secho("Converting to PDF/A-2b...", fg=typer.colors.BLUE)
     
     try:
-        # Load ICC profile
-        icc_path = Path(__file__).parent / "annex4ac" / "resources" / "sRGB.icc"
-        if not icc_path.exists():
-            typer.secho(f"  ICC profile not found: {icc_path}", fg=typer.colors.RED)
-            return
-        icc_bytes = icc_path.read_bytes()
-        typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+        # Load ICC profile using importlib.resources for proper package access
+        try:
+            import importlib.resources as pkg_resources
+            icc_bytes = pkg_resources.files("annex4ac.resources").joinpath("sRGB.icc").read_bytes()
+            typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+        except Exception as e:
+            # Fallback to direct file access
+            icc_path = Path(__file__).parent / "resources" / "sRGB.icc"
+            if not icc_path.exists():
+                typer.secho(f"  ICC profile not found: {icc_path}", fg=typer.colors.RED)
+                return
+            icc_bytes = icc_path.read_bytes()
+            typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
         
         with pikepdf.open(str(path), allow_overwriting_input=True) as pdf:
             typer.secho(f"  Opened PDF: {len(pdf.pages)} pages", fg=typer.colors.BLUE)
@@ -701,7 +687,12 @@ def _to_pdfa(path: Path):
         typer.secho(f"Error details: {traceback.format_exc()}", fg=typer.colors.RED)
 
 def _default_tpl() -> str:
-    return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
+    try:
+        import importlib.resources as pkg_resources
+        return pkg_resources.files("annex4ac.templates").joinpath("template.html").read_text(encoding='utf-8')
+    except Exception:
+        # Fallback to direct file access
+        return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
 
 def _render_html(data: dict, meta: dict) -> str:
     """Render HTML from template with data."""

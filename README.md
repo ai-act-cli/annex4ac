@@ -89,7 +89,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 | `standards_applied`      |  7         |
 | `compliance_declaration` |  8         |
 | `post_market_plan`       |  9         |
-| `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines if the PDF will be generated in short SME form automatically. |
+| `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – enterprise size classification (Art. 11 exemption). |
 | `placed_on_market`       | —          | ISO datetime when the AI system was placed on market (required for retention calculation). |
 | `last_updated`           | —          | ISO datetime of last documentation update (for optional freshness heuristic). |
 
