@@ -109,7 +109,9 @@ Run `annex4ac --help` for full CLI.
 Lists are automatically formatted according to EU drafting rules:
 - Ordered lists: `(a) ...; (b) ...; (c) ...`
 - Unordered lists: `• ...; • ...; • ...`
+- **Hierarchical lists**: Support for nested structure with `(a)` + `-` subitems
 - Proper punctuation with semicolons and final periods
+- **Cross-format consistency**: Same list structure in PDF, HTML, and DOCX
 
 ### Retention and Freshness Tracking
 - **10-year retention**: Automatic calculation and metadata embedding according to Article 18(1)
@@ -139,6 +141,36 @@ annex4ac generate my_annex.yaml --fmt pdf --pdfa
 ```
 
 **Legal compliance**: PDF/A-2b format ensures documents remain accessible and visually identical for decades, meeting archival requirements under Article 18 of Regulation 2024/1689.
+
+### List Formatting Examples
+
+#### Hierarchical Lists (EU-Compliant)
+```yaml
+development_process: |
+  (a) Requirements analysis phase (3 months):
+      - Stakeholder interviews and requirements gathering
+      - Technical feasibility assessment
+      - Risk analysis and compliance review
+  
+  (b) Design and architecture phase (4 months):
+      - System architecture design
+      - Data flow and security design
+      - Integration planning
+```
+
+#### Regular Bulleted Lists
+```yaml
+standards_applied: |
+  Compliance with international standards:
+  
+  - ISO 27001: Information security management
+  - IEEE 2857: AI system development guidelines
+  - GDPR: Data protection and privacy
+  - ISO 9001: Quality management systems
+  - Internal AI ethics guidelines and policies
+```
+
+Both formats are supported across all output formats (PDF, HTML, DOCX) with consistent rendering.
 
 ---
 
