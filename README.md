@@ -22,7 +22,7 @@ SaaS/PDF unlocks with a licence key .
 * **Built-in rule engine** – business-logic validation runs locally via pure Python.
 * **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
 * **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
-* **Freshness validation** – warns or fails when documentation is older than specified threshold (Article 11 compliance).
+* **Freshness validation** – configurable document staleness (not a legal requirement, but useful for maintenance).
 * **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
 * **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
 
@@ -51,6 +51,10 @@ annex4ac fetch-schema annex_template.yaml
 cp annex_template.yaml my_annex.yaml
 $EDITOR my_annex.yaml
 annex4ac validate my_annex.yaml   # "Validation OK!" or exit 1
+
+# Optional: Check if document is stale (heuristic, not legal requirement)
+annex4ac validate my_annex.yaml --stale-after 30  # Warn if older than 30 days
+annex4ac validate my_annex.yaml --stale-after 180 --strict-age  # Fail CI if older than 180 days
 
 # 4 Generate output (PDF requires license)
 # HTML (free)
@@ -87,7 +91,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 | `post_market_plan`       |  9         |
 | `enterprise_size`        | —          | `"sme"`, `"mid"`, `"large"` – determines if the PDF will be generated in short SME form automatically. |
 | `placed_on_market`       | —          | ISO datetime when the AI system was placed on market (required for retention calculation). |
-| `last_updated`           | —          | ISO datetime of last documentation update (required for freshness validation). |
+| `last_updated`           | —          | ISO datetime of last documentation update (for optional freshness heuristic). |
 
 ---
 
@@ -96,7 +100,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
-| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--max-age` for freshness validation, and `--strict-age` for strict age checking.             |
+| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
 
 Run `annex4ac --help` for full CLI.
@@ -104,6 +108,32 @@ Run `annex4ac --help` for full CLI.
 ---
 
 ## 🆕 New Features
+
+### Enhanced Schema Generation
+The `fetch-schema` command now generates a more comprehensive YAML template with:
+- **All mandatory fields** included with proper defaults
+- **Clear descriptions** for each field with examples
+- **Use cases from Annex III** with full list of available tags
+- **Better formatting** with proper spacing and alignment
+- **Helpful comments** explaining what each field means and how to fill it
+
+Example output:
+```yaml
+# enterprise_size: sme | mid | large (Art. 11 exemption)
+enterprise_size: ''
+
+# use_cases: list of tags (e.g., ['biometric_id', 'critical_infrastructure'])
+# Use cases that make AI system high-risk (from Annex III):
+#   biometric_id, critical_infrastructure, education_scoring, employment_screening,
+#   essential_services, law_enforcement, migration_control, justice_decision
+use_cases: []
+
+# risk_level: high | limited | minimal (Art. 6 / Annex III) - AI system risk classification
+risk_level: ''
+
+# placed_on_market: ISO datetime (e.g., 2024-01-15T10:30:00) - when AI system was first placed on market
+placed_on_market: ''
+```
 
 ### EU-Compliant List Formatting
 Lists are automatically formatted according to EU drafting rules:
@@ -115,8 +145,9 @@ Lists are automatically formatted according to EU drafting rules:
 
 ### Retention and Freshness Tracking
 - **10-year retention**: Automatic calculation and metadata embedding according to Article 18(1)
-- **Freshness validation**: `--max-age 180` (default) or `--strict-age` for CI enforcement
-- **Compliance**: Meets Article 11 (up-to-date) and Article 18 (retention) requirements
+- **Freshness heuristic**: `--stale-after N` (optional, disabled by default) or `--strict-age` for CI enforcement
+- **Environment variable**: Set `ANNEX4AC_STALE_AFTER=180` to enable stale-after by default
+- **Legal compliance**: Meets Article 18 (retention) requirements; freshness is a maintenance heuristic, not a legal requirement
 - **Legal accuracy**: Retention period calculated from `placed_on_market` date
 
 ### Unified Text Processing
