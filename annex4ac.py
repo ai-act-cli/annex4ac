@@ -69,7 +69,7 @@ def _parse_iso_date(val):
     if isinstance(val, date):
         return datetime.combine(val, datetime.min.time())
     if isinstance(val, str) and val.strip():
-        # допускаем без "T"
+        # allow without "T"
         return parse_dt(val if 'T' in val else val + "T00:00:00")
     return datetime.now()
 
@@ -107,56 +107,118 @@ except ImportError:
 
 # Regular expressions for parsing lists
 BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
-SUBPOINT_RE = re.compile(r'^\(([a-z])\)\s+', re.I)  # (a), (b)...
+SUBPOINT_RE = re.compile(r'^\s*\(([a-z])\)\s+', re.I)  # (a), (b)...
 
 def listify(text: str) -> Markup:
+    """
+    Creates HIERARCHICAL structure:
+      (a) Item heading
+          - subitem
+          - subitem
+      (b) ...
+    One <ol class="alpha"> per group; each <li> can contain <ul>.
+    Also processes regular bulleted lists.
+    """
     if not text:
         return Markup("")
     text = fix_text(text)
 
-    out = []
-    mode = None          # None | 'ul' | 'ol'
-    buf  = []
+    out: list[str] = []
+    lines = text.splitlines()
 
-    def flush():
-        nonlocal mode, buf
-        if not mode or not buf:
+    # Current top-level "block"
+    ol_items: list[dict] = []   # [{'head': str, 'bullets': [str,...]}]
+    current: dict | None = None
+
+    def punctuate(arr: list[str]) -> list[str]:
+        arr = [s.rstrip(" ;.") for s in arr]
+        result = []
+        for i, s in enumerate(arr):
+            # Don't add period/semicolon if string ends with colon
+            if s.endswith(':'):
+                result.append(s)
+            else:
+                result.append(s + ("." if i == len(arr)-1 else ";"))
+        return result
+
+    def flush_ol():
+        nonlocal ol_items, current
+        if current:
+            ol_items.append(current)
+            current = None
+        if not ol_items:
             return
-        def punctuate(arr):
-            arr = [s.rstrip(' ;.') for s in arr]
-            return [s + (';' if i < len(arr)-1 else '.') for i, s in enumerate(arr)]
-        if mode == 'ol':
-            li = ''.join(f'<li>{escape(x)}</li>' for x in punctuate(buf))
-            out.append(f'<ol class="alpha">{li}</ol>')
-        else:
-            li = ''.join(f'<li>{escape(x)}</li>' for x in punctuate(buf))
-            out.append(f'<ul>{li}</ul>')
-        mode, buf = None, []
+        # render one common <ol>
+        li_html = []
+        for item in ol_items:
+            head = escape(item['head'])
+            if item['bullets']:
+                bullets = ''.join(f"<li>{escape(b)}</li>" for b in punctuate(item['bullets']))
+                li_html.append(f"<li>{head}<ul>{bullets}</ul></li>")
+            else:
+                li_html.append(f"<li>{head}</li>")
+        out.append(f"<ol class=\"alpha\">{''.join(li_html)}</ol>")
+        ol_items = []
 
-    for raw in text.splitlines():
-        line = raw.strip()
+    def flush_ul(ul_items: list[str]):
+        if not ul_items:
+            return
+        bullets = ''.join(f"<li>{escape(b)}</li>" for b in punctuate(ul_items))
+        out.append(f"<ul>{bullets}</ul>")
+
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
         if not line:
-            # empty line inside list – just skip
-            if mode in ('ul', 'ol'):
-                continue
-            flush()
+            i += 1
             continue
 
-        if SUBPOINT_RE.match(line):
-            cleaned = SUBPOINT_RE.sub('', line, 1).strip()
-            if mode != 'ol':
-                flush(); mode = 'ol'
-            buf.append(cleaned)
-        elif BULLET_RE.match(line):
-            cleaned = BULLET_RE.sub('', line, 1).strip()
-            if mode != 'ul':
-                flush(); mode = 'ul'
-            buf.append(cleaned)
-        else:
-            flush()
-            out.append(f'<p>{escape(line)}</p>')
+        m_alpha = SUBPOINT_RE.match(line)
+        m_bullet = BULLET_RE.match(line)
 
-    flush()
+        if m_alpha:
+            # New item (a)/(b)...
+            cleaned = SUBPOINT_RE.sub('', line, 1).strip()
+            # Close previous item and add to array
+            if current:
+                ol_items.append(current)
+            current = {'head': cleaned, 'bullets': []}
+            i += 1
+            continue
+
+        if m_bullet and current:
+            # Bullet inside (a)/(b) structure
+            cleaned = BULLET_RE.sub('', line, 1).strip()
+            current['bullets'].append(cleaned)
+            i += 1
+            continue
+
+        if m_bullet and not current:
+            # Regular bulleted list without (a)/(b)...
+            flush_ol()
+            ul_items = [BULLET_RE.sub('', line, 1).strip()]
+            i += 1
+            # Collect all subsequent bullets
+            while i < len(lines):
+                next_line = lines[i].strip()
+                if not next_line:
+                    break
+                if BULLET_RE.match(next_line):
+                    ul_items.append(BULLET_RE.sub('', next_line, 1).strip())
+                    i += 1
+                else:
+                    break
+            flush_ul(ul_items)
+            continue
+
+        # Regular text — need to close current ol-block (if any)
+        flush_ol()
+        out.append(f"<p>{escape(line)}</p>")
+        i += 1
+
+    # Final flush
+    flush_ol()
+
     return Markup('\n'.join(out))
 
 
@@ -307,13 +369,17 @@ def _write_yaml(data: Dict[str, str], path: Path):
 
 
 def _punctuate(items: list[str]) -> list[str]:
-    """Adds ';' after each list item and '.' after the last one."""
+    """Adds ';' after each list item and '.' after the last one, but not after colon."""
     if not items:
         return items
     out = []
     for i, t in enumerate(items):
         t = t.rstrip(" ;.")
-        out.append(t + ("." if i == len(items)-1 else ";"))
+        # Don't add period/semicolon if string ends with colon
+        if t.endswith(':'):
+            out.append(t)
+        else:
+            out.append(t + ("." if i == len(items)-1 else ";"))
     return out
 
 def _make_ul(items):
@@ -326,14 +392,19 @@ def _make_ul(items):
     )
 
 def _make_ol(items, start=1):
+    """Alphabetical list ((a),(b)…). Pass value=…, otherwise ReportLab repeats (a)."""
     items = _punctuate(items)
+    flow_items = [
+        ListItem(Paragraph(t, _get_body_style()), value=i)
+        for i, t in enumerate(items, start)
+    ]
     return ListFlowable(
-        [Paragraph(t, _get_body_style()) for t in items],
-        bulletType='a',          # a, b, c...
-        bulletFormat='(%s)',     # wrap in parentheses
-        start=start,
+        flow_items,
+        bulletType='a',
+        bulletFormat='(%s)',
         leftIndent=18,
         bulletIndent=0,
+        start=start,
     )
 
 def _text_to_flowables(text: str):
@@ -346,13 +417,15 @@ def _text_to_flowables(text: str):
 
     lines = text.splitlines()
     flows, mode, buf = [], None, []
+    alpha_cursor = 1
 
     def flush():
-        nonlocal mode, buf
+        nonlocal mode, buf, alpha_cursor
         if not buf:
             return
         if mode == 'ol':
-            flows.append(_make_ol(buf))
+            flows.append(_make_ol(buf, start=alpha_cursor))
+            alpha_cursor += len(buf)
         elif mode == 'ul':
             flows.append(_make_ul(buf))
         mode, buf = None, []

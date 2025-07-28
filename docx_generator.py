@@ -268,16 +268,24 @@ def render_docx(payload: dict, output_path: Path, meta: dict):
                     txt = SUBPOINT_RE.sub('', line, 1).strip()
                     if alpha_id is None:
                         alpha_id = _new_alpha_list(doc)
-                    # add ;/. automatically
-                    suffix = '.' if _is_last_in_block(line, para) else ';'
-                    p = doc.add_paragraph(txt.rstrip(' ;.') + suffix)
+                    # add ;/. automatically, but not after colon
+                    txt_clean = txt.rstrip(' ;.')
+                    if txt_clean.endswith(':'):
+                        suffix = ''
+                    else:
+                        suffix = '.' if _is_last_in_block(line, para) else ';'
+                    p = doc.add_paragraph(txt_clean + suffix)
                     _apply_numbering(p, alpha_id)      # sets w:numPr + indentation
                     mode = 'ol'
                 elif BULLET_RE.match(line):
                     txt = BULLET_RE.sub('', line, 1).strip()
-                    # add ;/. automatically
-                    suffix = '.' if _is_last_in_block(line, para) else ';'
-                    p = doc.add_paragraph(txt.rstrip(' ;.') + suffix, style='List Bullet')
+                    # add ;/. automatically, but not after colon
+                    txt_clean = txt.rstrip(' ;.')
+                    if txt_clean.endswith(':'):
+                        suffix = ''
+                    else:
+                        suffix = '.' if _is_last_in_block(line, para) else ';'
+                    p = doc.add_paragraph(txt_clean + suffix, style='List Bullet')
                     _apply_indent(p, left=720, hanging=360)   # same indentation as ol
                     mode = 'ul'
                 else:

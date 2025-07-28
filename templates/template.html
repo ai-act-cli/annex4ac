@@ -35,11 +35,16 @@
         footer{margin-block:3rem 1rem;font-size:0.9em;color:#666;text-align:center;}
         ol[type="a"]{ list-style-type: lower-alpha; }
         ol.alpha { 
-            list-style: lower-alpha; 
             counter-reset: item; 
+            margin-left: 1.2em; 
+            padding-left: 0; 
+        }
+        ol.alpha > li { 
+            list-style: none; 
+            counter-increment: item; 
         }
         ol.alpha > li::marker { 
-            content: "(" counter(list-item, lower-alpha) ") "; 
+            content: "(" counter(item, lower-alpha) ") "; 
         }
         h1,h2,h3{ page-break-after: avoid; }
         .section-content li{ page-break-inside: avoid; }
