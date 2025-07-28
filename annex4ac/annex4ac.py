@@ -756,7 +756,7 @@ def _check_freshness(dt, max_days=None, strict=False):
     if not max_days or max_days <= 0:
         return
     if datetime.now() - dt > timedelta(days=max_days):
-        msg = f"Technical doc is older than {max_days} days — consider updating (Art. 11 'doc must be kept up-to-date')."
+        msg = f"Technical doc is older than {max_days} days — consider updating (Art. 11 'techdoc must be kept up-to-date')."
         if strict:
             typer.secho(f"[ERROR] {msg}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)

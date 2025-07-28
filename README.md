@@ -22,7 +22,7 @@ SaaS/PDF unlocks with a licence key .
 * **Built-in rule engine** – business-logic validation runs locally via pure Python.
 * **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
 * **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
-* **Freshness validation** – configurable document staleness (not a legal requirement, but useful for maintenance).
+* **Freshness validation** – configurable document staleness (not a legal requirement, but techdoc must be kept up-to-date according to Art. 11).
 * **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
 * **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
 
