@@ -1,4 +1,5 @@
 # Annex IV‑as‑Code (annex4ac)
+Project code and files located at https://github.com/ai-act-cli/annex4ac
 
 Generate and validate EU AI Act Annex IV technical documentation straight from your CI. 
 
@@ -31,15 +32,18 @@ annex4ac validate my_annex.yaml --stale-after 30  # Warn if older than 30 days
 annex4ac validate my_annex.yaml --stale-after 180 --strict-age  # Fail CI if older than 180 days
 
 # 4 Generate output (PDF requires license)
-# HTML (free)
+# HTML (free) - automatically validates before generation
 annex4ac generate my_annex.yaml --output annex_iv.html --fmt html
 
-# DOCX (free)  
+# DOCX (free) - automatically validates before generation
 annex4ac generate my_annex.yaml --output annex_iv.docx --fmt docx
 
-# PDF (Pro - requires license)
+# PDF (Pro - requires license) - automatically validates before generation
 export ANNEX4AC_LICENSE="your_jwt_token_here"
 annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
+
+# Skip validation if needed (not recommended)
+annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validation
 ```
 
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
@@ -61,6 +65,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 * **Freshness validation** – configurable document staleness (not a legal requirement, but techdoc must be kept up-to-date according to Art. 11).
 * **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
 * **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
+* **Auto-validation** – `annex4ac generate` automatically validates YAML before generation, ensuring compliance.
 
 ---
 
@@ -101,7 +106,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
-| `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
+| `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Automatically validates before generation. PDF requires license, HTML/DOCX are free. |
 
 Run `annex4ac --help` for full CLI.
 
