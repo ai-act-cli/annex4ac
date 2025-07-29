@@ -12,32 +12,6 @@ SaaS/PDF unlocks with a licence key .
 
 ---
 
-## ✨ Features
-
-* **Always up‑to‑date** – every run pulls the latest Annex IV HTML from the official AI Act Explorer.
-* **Schema‑first** – YAML scaffold mirrors the **9 numbered sections** adopted in the July 2024 Official Journal.
-* **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
-* **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
-* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
-* **Built-in rule engine** – business-logic validation runs locally via pure Python.
-* **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
-* **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
-* **Freshness validation** – configurable document staleness (not a legal requirement, but techdoc must be kept up-to-date according to Art. 11).
-* **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
-* **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
-
----
-
-## 🛠 Requirements
-
-- Python 3.9+
-- [reportlab](https://www.reportlab.com/documentation) (PDF, Pro)
-- [pydantic](https://docs.pydantic.dev) (schema validation)
-- [typer](https://typer.tiangolo.com) (CLI)
-- [pyyaml](https://pyyaml.org/) (YAML)
-
----
-
 ## 🚀 Quick‑start
 
 ```bash
@@ -71,6 +45,32 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
 
 > **Hint :** You only need to edit the YAML once per model version—CI keeps it green.
+
+---
+
+## ✨ Features
+
+* **Always up‑to‑date** – every run pulls the latest Annex IV HTML from the official AI Act Explorer.
+* **Schema‑first** – YAML scaffold mirrors the **9 numbered sections** adopted in the July 2024 Official Journal.
+* **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
+* **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
+* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
+* **Built-in rule engine** – business-logic validation runs locally via pure Python.
+* **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
+* **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
+* **Freshness validation** – configurable document staleness (not a legal requirement, but techdoc must be kept up-to-date according to Art. 11).
+* **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
+* **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
+
+---
+
+## 🛠 Requirements
+
+- Python 3.9+
+- [reportlab](https://www.reportlab.com/documentation) (PDF, Pro)
+- [pydantic](https://docs.pydantic.dev) (schema validation)
+- [typer](https://typer.tiangolo.com) (CLI)
+- [pyyaml](https://pyyaml.org/) (YAML)
 
 ---
 
