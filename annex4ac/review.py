@@ -336,6 +336,34 @@ def extract_and_analyze_text(text: str, filename: str = "document") -> List[str]
     return analyze_text(text, filename)
 
 
+def analyze_annex_payload(payload: dict) -> List[dict]:
+    """
+    Analyze Annex IV payload for compliance issues.
+    
+    Args:
+        payload: Dictionary containing Annex IV sections
+        
+    Returns:
+        List of structured issue dictionaries
+    """
+    # Convert payload to text format for analysis
+    docs_texts = []
+    
+    # Extract text from payload sections
+    text_parts = []
+    for key, value in payload.items():
+        if isinstance(value, str) and value.strip():
+            text_parts.append(f"{key}: {value}")
+    
+    # Combine all text
+    combined_text = "\n".join(text_parts)
+    
+    # Analyze the combined text
+    issues = analyze_text(combined_text, "annex_payload")
+    
+    return issues
+
+
 def handle_multipart_review_request(headers: dict, body: bytes) -> dict:
     """
     Handle multipart/form-data request for document review.
