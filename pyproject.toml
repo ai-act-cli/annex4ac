@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "1.1.6"
+version = "1.2.0"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV with legal compliance"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,7 +21,10 @@ dependencies = [
   "cryptography>=42",
   "python-docx>=1.1",
   "ftfy>=6.0",
-  "pikepdf>=8.0"
+  "pikepdf>=8.0",
+  "PyPDF2>=3.0",
+  "pdfplumber>=0.10",
+  "PyMuPDF>=1.23"
 ]
 
 [project.scripts]

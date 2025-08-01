@@ -66,6 +66,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validatio
 * **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
 * **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
 * **Auto-validation** – `annex4ac generate` automatically validates YAML before generation, ensuring compliance.
+* **Compliance review** – `annex4ac review` analyzes PDF technical documentation for missing sections, contradictions, and compliance issues.
 
 ---
 
@@ -107,6 +108,7 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validatio
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Automatically validates before generation. PDF requires license, HTML/DOCX are free. |
+| `review`       | Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Returns structured output with errors and warnings. |
 
 Run `annex4ac --help` for full CLI.
 
@@ -121,24 +123,6 @@ The `fetch-schema` command now generates a more comprehensive YAML template with
 - **Use cases from Annex III** with full list of available tags
 - **Better formatting** with proper spacing and alignment
 - **Helpful comments** explaining what each field means and how to fill it
-
-Example output:
-```yaml
-# enterprise_size: sme | mid | large (Art. 11 exemption)
-enterprise_size: ''
-
-# use_cases: list of tags (e.g., ['biometric_id', 'critical_infrastructure'])
-# Use cases that make AI system high-risk (from Annex III):
-#   biometric_id, critical_infrastructure, education_scoring, employment_screening,
-#   essential_services, law_enforcement, migration_control, justice_decision
-use_cases: []
-
-# risk_level: high | limited | minimal (Art. 6 / Annex III) - AI system risk classification
-risk_level: ''
-
-# placed_on_market: ISO datetime (e.g., 2024-01-15T10:30:00) - when AI system was first placed on market
-placed_on_market: ''
-```
 
 ### EU-Compliant List Formatting
 Lists are automatically formatted according to EU drafting rules:
@@ -178,6 +162,34 @@ annex4ac generate my_annex.yaml --fmt pdf --pdfa
 
 **Legal compliance**: PDF/A-2b format ensures documents remain accessible and visually identical for decades, meeting archival requirements under Article 18 of Regulation 2024/1689.
 
+### Automatic Compliance Review
+The new `review` command analyzes PDF technical documentation for compliance issues:
+
+```bash
+# Review single PDF file
+annex4ac review technical_doc.pdf
+
+# Review multiple PDF files for contradictions
+annex4ac review doc1.pdf doc2.pdf doc3.pdf
+```
+
+**Features:**
+- **Annex IV section validation**: Checks for all 9 required sections with specific section numbers
+- **High-risk system detection**: Identifies biometric/law enforcement systems not properly labeled as high-risk
+- **GDPR compliance analysis**: Detects indefinite data retention, missing consent/lawful basis, and missing data subject rights
+- **Contradiction detection**: Finds internal contradictions and cross-document inconsistencies
+- **Comprehensive compliance checks**: Analyzes transparency, bias detection, and security measures
+- **Cross-document analysis**: Compares system names, versions, and risk assessments across multiple documents
+- **PDF text extraction**: Supports PyPDF2, pdfplumber, and PyMuPDF for robust text extraction
+- **Legal disclaimer**: Includes appropriate disclaimers about automated analysis
+
+### Structured Response Format
+The review functionality now returns structured data with:
+- **Error/Warning classification**: Issues are categorized by severity
+- **Section mapping**: Missing Annex IV sections are tagged with specific section numbers
+- **Cross-document analysis**: Contradictions between documents are identified
+- **JSON API support**: Structured responses for integration with web applications
+
 ### List Formatting Examples
 
 #### Hierarchical Lists (EU-Compliant)
@@ -207,6 +219,111 @@ standards_applied: |
 ```
 
 Both formats are supported across all output formats (PDF, HTML, DOCX) with consistent rendering.
+
+### API Functions for HTTP Requests
+
+The package provides API functions for handling HTTP requests:
+
+```python
+from annex4ac.review import (
+    handle_multipart_review_request,
+    handle_text_review_request,
+    create_review_response
+)
+
+# Handle multipart/form-data request
+headers = {'Content-Type': 'multipart/form-data; boundary=...'}
+body = b'...'  # multipart form data
+result = handle_multipart_review_request(headers, body)
+
+# Handle text review request
+result = handle_text_review_request("AI system text content", "document.txt")
+
+# Create structured response
+response = create_review_response(issues)
+```
+
+**Structured Response Format:**
+```json
+{
+  "success": true,
+  "processed_files": ["doc1.pdf", "doc2.pdf"],
+  "total_files": 2,
+  "issues": [
+    {
+      "type": "error",
+      "section": "1",
+      "file": "doc1.pdf",
+      "message": "Missing content for Annex IV section 1 (system overview)."
+    },
+    {
+      "type": "warning",
+      "section": null,
+      "file": "doc1.pdf",
+      "message": "No mention of transparency or explainability."
+    }
+  ],
+  "summary": {
+    "total_issues": 2,
+    "errors": 1,
+    "warnings": 1
+  }
+}
+```
+
+**Issue Types:**
+- `"error"`: Critical issues (missing required sections, contradictions, GDPR violations)
+- `"warning"`: Potential issues (missing transparency, bias detection, etc.)
+
+**Section Numbers:**
+- `"1"` to `"9"`: Annex IV section numbers
+- `null`: Issues not tied to specific sections
+
+### Using Review Functions as a Library
+
+The review functionality can also be used programmatically as a library:
+
+```python
+from pathlib import Path
+from annex4ac.review import review_documents, analyze_text
+
+# Review multiple PDF files
+pdf_files = [Path("doc1.pdf"), Path("doc2.pdf")]
+issues = review_documents(pdf_files)
+for issue in issues:
+    print(f"{issue['type'].upper()}: {issue['message']}")
+
+# Analyze text content directly
+text_content = "This AI system processes personal data..."
+issues = analyze_text(text_content, "my_document.txt")
+for issue in issues:
+    print(f"{issue['type'].upper()}: {issue['message']}")
+```
+
+**Available Library Functions:**
+- `review_documents(pdf_files: List[Path]) -> List[dict]` - Review multiple PDF files
+- `review_single_document(pdf_file: Path) -> List[dict]` - Review a single PDF file
+- `analyze_text(text: str, filename: str = "document") -> List[dict]` - Analyze text content
+- `extract_text_from_pdf(pdf_path: Path) -> str` - Extract text from PDF (low-level)
+
+**Structured Issue Format:**
+Each issue is a dictionary with:
+- `type`: "error" or "warning"
+- `section`: "1"-"9" for Annex IV sections, `null` for general issues
+- `file`: filename or `""` for cross-document issues
+- `message`: description of the issue
+
+**Error Handling:**
+```python
+try:
+    issues = review_documents([Path("document.pdf")])
+except ImportError:
+    print("Install PDF libraries: pip install PyPDF2 pdfplumber PyMuPDF")
+except Exception as e:
+    print(f"Error: {e}")
+```
+
+See `examples/review_example.py` for complete usage examples.
 
 ---
 
