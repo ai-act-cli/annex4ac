@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "1.2.6"
+version = "1.2.7"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV with legal compliance"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -29,8 +29,7 @@ dependencies = [
   "negspacy>=1.0.4",
   "nltk>=3.8",
   "spacy-lookups-data>=1.0",
-  "anyio>=4.9",
-  "pytesseract>=0.3.10",
+  "anyio>=4.9"
 ]
 
 [project.scripts]
