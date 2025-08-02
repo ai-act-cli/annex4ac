@@ -1,6 +1,6 @@
 [project]
 name = "annex4ac"
-version = "1.2.5"
+version = "1.2.6"
 description = "Annex IV-as-Code CLI: generate & validate EU AI Act Annex IV with legal compliance"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,7 +31,6 @@ dependencies = [
   "spacy-lookups-data>=1.0",
   "anyio>=4.9",
   "pytesseract>=0.3.10",
-  "Pillow>=10.0"
 ]
 
 [project.scripts]
