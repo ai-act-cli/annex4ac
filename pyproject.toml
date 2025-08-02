@@ -28,7 +28,6 @@ dependencies = [
   "spacy>=3.7.5",
   "negspacy>=1.0.4",
   "nltk>=3.8",
-  "spacy-lookups-data>=1.0",
   "anyio>=4.9"
 ]
 

@@ -258,7 +258,6 @@ def _get_nlp(batch_size: int = 128):
     
     # Load spaCy model
     _nlp = spacy.blank("en")
-    _nlp.add_pipe("lemmatizer", config={"mode": "lookup"})
     _nlp.initialize()    
     # Add custom tokenizer that preserves hyphenated terms
     from spacy.tokenizer import Tokenizer
