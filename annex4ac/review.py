@@ -257,12 +257,9 @@ def _get_nlp(batch_size: int = 128):
         return None
     
     # Load spaCy model
-    try:
-        _nlp = spacy.load("en_core_web_sm")
-    except OSError:
-        # Fallback to blank model if en_core_web_sm is not available
-        _nlp = spacy.blank("en")
-    
+    _nlp = spacy.blank("en")
+    _nlp.add_pipe("lemmatizer", config={"mode": "lookup"})
+    _nlp.initialize()    
     # Add custom tokenizer that preserves hyphenated terms
     from spacy.tokenizer import Tokenizer
     from spacy.util import compile_prefix_regex, compile_suffix_regex, compile_infix_regex
