@@ -39,51 +39,51 @@ except ImportError:
 # ---------------- spaCy / negspaCy singleton ----------------
 _nlp = None
 
-# Функция для улучшенного negation detection с word boundaries
+# Function for improved negation detection with word boundaries
 def _check_negation_regex(text: str, term: str) -> bool:
     """
-    Проверяет отрицание термина с использованием regex и word boundaries.
-    Поддерживает как обычные пробелы, так и дефисы в терминах.
+    Checks for term negation using regex and word boundaries.
+    Supports both regular spaces and hyphens in terms.
     
     Args:
-        text: Текст для анализа (уже в нижнем регистре)
-        term: Термин для проверки
+        text: Text to analyze (already in lowercase)
+        term: Term to check
         
     Returns:
-        True если термин отрицается, False иначе
+        True if term is negated, False otherwise
         
-    Примеры:
-        "not only personal data" -> False (не отрицание)
-        "no personal data stored" -> True (отрицание)
-        "without personal data" -> True (отрицание)
-        "no personal-data stored" -> True (отрицание с дефисом)
+    Examples:
+        "not only personal data" -> False (not negation)
+        "no personal data stored" -> True (negation)
+        "without personal data" -> True (negation)
+        "no personal-data stored" -> True (negation with hyphen)
     """
     import re
     
-    # Список отрицающих слов
+    # List of negating words
     negation_words = ["no", "not", "without", "never", "none", "neither", "nor"]
     
-    # Нормализуем термин для поиска (заменяем дефисы на пробелы)
+    # Normalize term for search (replace hyphens with spaces)
     normalized_term = _normalize_term(term)
     
-    # Экранируем специальные символы в термине
+    # Escape special characters in the term
     escaped_term = re.escape(normalized_term)
     
-    # Создаем паттерн с word boundaries
-    # \b - word boundary (граница слова)
+    # Create pattern with word boundaries
+    # \b - word boundary
     # (?:...) - non-capturing group
-    # \s+ - один или более пробелов
+    # \s+ - one or more spaces
     pattern = rf'\b(?:{"|".join(negation_words)})\s+{escaped_term}\b'
     
-    # Проверяем в нормализованном тексте
+    # Check in normalized text
     text_normalized = text.replace('-', ' ')
     return bool(re.search(pattern, text_normalized, re.IGNORECASE))
 
-# Определяем ключевые термины для compliance-анализа
-# Только смысловые биграмы/трограммы (убраны однословные stop-tokens)
-# Дедуплицированы по префиксам для оптимизации PhraseMatcher
+# Define key terms for compliance analysis
+# Only meaningful bigrams/trigrams (single-word stop-tokens removed)
+# Deduplicated by prefixes for PhraseMatcher optimization
 KEY_TERMS = [
-    # Биграмы и трограммы - только смысловые термины
+    # Bigrams and trigrams - only meaningful terms
     "personal data", "high risk", "high-risk", "biometric identification", "data protection",
     "risk assessment", "compliance check", "data processing", "user consent",
     "lawful basis", "data retention", "access control", "audit trail",
@@ -115,50 +115,50 @@ KEY_TERMS = [
 
 def _normalize_term(term: str) -> str:
     """
-    Нормализует термин, приводя варианты с дефисом к единому виду.
+    Normalizes a term by converting hyphenated variants to a unified form.
     
     Args:
-        term: Исходный термин
+        term: Original term
         
     Returns:
-        Нормализованный термин
+        Normalized term
         
-    Примеры:
+    Examples:
         "high-risk" -> "high risk"
         "data-protection" -> "data protection"
-        "personal data" -> "personal data" (без изменений)
+        "personal data" -> "personal data" (no changes)
     """
-    # Заменяем дефисы на пробелы для единообразия
+    # Replace hyphens with spaces for consistency
     normalized = term.replace("-", " ")
-    # Убираем лишние пробелы
+    # Remove extra spaces
     normalized = " ".join(normalized.split())
     return normalized
 
 def _deduplicate_terms(terms):
     """
-    Удаляет термины, которые являются префиксами других терминов или нормализованными вариантами.
-    Использует простую нормализацию для надежности.
+    Removes terms that are prefixes of other terms or normalized variants.
+    Uses simple normalization for reliability.
     
     Args:
-        terms: Список терминов для дедупликации
+        terms: List of terms to deduplicate
         
     Returns:
-        Список уникальных терминов
+        List of unique terms
     """
-    # Используем простую нормализацию для надежности
+    # Use simple normalization for reliability
     normalized_terms = {}
     for term in terms:
         normalized = _normalize_term(term)
-        # Сохраняем самый длинный вариант как основной
+        # Save the longest variant as the main one
         if normalized not in normalized_terms or len(term) > len(normalized_terms[normalized]):
             normalized_terms[normalized] = term
     
-    # Применяем дедупликацию префиксов
+    # Apply prefix deduplication
     sorted_terms = sorted(normalized_terms.values(), key=len, reverse=True)
     filtered_terms = []
     
     for term in sorted_terms:
-        # Проверяем, не является ли этот термин префиксом уже добавленных
+        # Check if this term is a prefix of already added terms
         is_prefix = False
         for existing in filtered_terms:
             if existing.startswith(term + " "):
@@ -169,10 +169,10 @@ def _deduplicate_terms(terms):
     
     return filtered_terms
 
-# Применяем дедупликацию
+# Apply deduplication
 KEY_TERMS = _deduplicate_terms(KEY_TERMS)
 
-# 1 – Создаём компонент term_matcher с lemmatized matching
+# 1 – Create term_matcher component with lemmatized matching
 from spacy.language import Language
 from spacy.matcher import PhraseMatcher
 from spacy.tokens import Span
@@ -180,19 +180,19 @@ from spacy.util import filter_spans
 
 @Language.factory("term_matcher")
 def create_term_matcher(nlp, name):
-    # Используем LEMMA для лемматизированного поиска (store/stored/storing)
+    # Use LEMMA for lemmatized search (store/stored/storing)
     matcher = PhraseMatcher(nlp.vocab, attr="LEMMA")
     
-    # Добавляем термины с лемматизацией и нормализацией
-    # PhraseMatcher с LEMMA работает с готовыми документами
+    # Add terms with lemmatization and normalization
+    # PhraseMatcher with LEMMA works with prepared documents
     patterns = []
     for term in KEY_TERMS:
-        # Создаем документ для каждого термина (однословного или биграма)
+        # Create document for each term (single word or bigram)
         doc_pattern = nlp(term)
         if len(doc_pattern) > 0:
             patterns.append(doc_pattern)
         
-        # Также добавляем нормализованную версию для лучшего покрытия
+        # Also add normalized version for better coverage
         normalized_term = _normalize_term(term)
         if normalized_term != term:
             doc_normalized = nlp(normalized_term)
@@ -205,34 +205,34 @@ def create_term_matcher(nlp, name):
         matches = matcher(doc)
         spans = [Span(doc, start, end, label="TERM") for _, start, end in matches]
         
-        # Используем встроенную функцию filter_spans для оптимизации
-        # Приоритет более длинным spans (по умолчанию)
+        # Use built-in filter_spans function for optimization
+        # Priority to longer spans (default)
         filtered_spans = filter_spans(spans)
         
-        # Используем doc.set_ents для сохранения integrity NER-результатов
-        # default="unmodified" - сохраняем существующие entities (PERSON/ORG/NER)
-        # Это критично для negspaCy, который может использовать эти метки для определения negation
+        # Use doc.set_ents to preserve NER result integrity
+        # default="unmodified" - preserve existing entities (PERSON/ORG/NER)
+        # This is critical for negspaCy, which may use these labels for negation detection
         doc.set_ents(filtered_spans, default="unmodified")
         return doc
     return component
 
-# Кастомные правила NegEx для GDPR/compliance контекста
+# Custom NegEx rules for GDPR/compliance context
 from negspacy.negation import Negex
 
-# Кастомные правила для GDPR/compliance контекста
+# Custom rules for GDPR/compliance context
 CUSTOM_PSEUDO_NEGATIONS = [
     "lawful", "legal", "legitimate", "authorized", "permitted", 
     "valid", "proper", "correct", "appropriate"
-]  # «no _lawful_ basis» ≠ отрицание
+]  # «no _lawful_ basis» ≠ negation
 
 CUSTOM_PRECEDING_NEGATIONS = [
     "without", "absence of", "lack of", "failure to", "not", "no", 
     "never", "none", "neither", "nor"
-]  # GDPR-кейсы
+]  # GDPR cases
 
 CUSTOM_FOLLOWING_NEGATIONS = [
     "denied", "rejected", "prohibited", "forbidden", "excluded"
-]  # Дополнительные following negations для GDPR
+]  # Additional following negations for GDPR
 
 def _get_nlp(batch_size: int = 128):
     """
@@ -246,7 +246,7 @@ def _get_nlp(batch_size: int = 128):
     """
     global _nlp
     
-    # Если _nlp уже создан, но с другим batch_size, пересоздаем
+    # If _nlp is already created but with different batch_size, recreate it
     if _nlp is not None and hasattr(_nlp, '_batch_size') and _nlp._batch_size != batch_size:
         _nlp = None
     
@@ -265,28 +265,28 @@ def _get_nlp(batch_size: int = 128):
     from spacy.util import compile_prefix_regex, compile_suffix_regex, compile_infix_regex
     
     def custom_tokenizer(nlp):
-        """Кастомный токенизатор, который не разбивает слова с дефисами"""
+        """Custom tokenizer that doesn't split hyphenated words"""
         prefix_re = compile_prefix_regex(nlp.Defaults.prefixes)
         suffix_re = compile_suffix_regex(nlp.Defaults.suffixes)
         infix = list(nlp.Defaults.infixes)
         
-        # Убираем дефис из infix-сплита, чтобы "high-risk" оставался одним токеном
+        # Remove hyphen from infix split so "high-risk" remains one token
         if r"(?<=[0-9])[+\-\*^](?=[0-9-])" in infix:
             infix.remove(r"(?<=[0-9])[+\-\*^](?=[0-9-])")
         
-        # Также убираем общий дефис-сплит
+        # Also remove general hyphen split
         if r"(?<=[a-zA-Z])[-\u2013\u2014](?=[a-zA-Z])" in infix:
             infix.remove(r"(?<=[a-zA-Z])[-\u2013\u2014](?=[a-zA-Z])")
         
         infix_re = compile_infix_regex(infix)
         
-        # Используем правильный API для создания токенизатора
+        # Use correct API for creating tokenizer
         try:
-            # Для новых версий spaCy
+            # For newer spaCy versions
             return Tokenizer(nlp.vocab, prefix_search=prefix_re.search, 
                            suffix_search=suffix_re.search, infix_finditer=infix_re.finditer)
         except TypeError:
-            # Для старых версий spaCy
+            # For older spaCy versions
             return Tokenizer(nlp.vocab, prefix_re=prefix_re, suffix_re=suffix_re, infix_re=infix_re)
     
     _nlp.tokenizer = custom_tokenizer(_nlp)
@@ -294,23 +294,23 @@ def _get_nlp(batch_size: int = 128):
     _nlp.add_pipe("sentencizer")                          # 1️⃣
     _nlp.add_pipe("term_matcher", after="sentencizer")    # 2️⃣
     
-    # Создаем кастомный termset для GDPR/compliance контекста
+    # Create custom termset for GDPR/compliance context
     ts_custom = {
         "pseudo_negations": CUSTOM_PSEUDO_NEGATIONS,
         "preceding_negations": CUSTOM_PRECEDING_NEGATIONS,
         "following_negations": CUSTOM_FOLLOWING_NEGATIONS,
-        # Используем стандартные termination terms
+        # Use standard termination terms
         "termination": ["but", "however", "nevertheless", "except"]
     }
     
-    # Добавляем negex с кастомной конфигурацией
+    # Add negex with custom configuration
     _nlp.add_pipe(
         "negex",
         config={"neg_termset": ts_custom},
         last=True
     )  # 3️⃣
     
-    # Сохраняем batch_size в объекте nlp для использования в других функциях
+    # Save batch_size in nlp object for use in other functions
     _nlp._batch_size = batch_size
     
     return _nlp
@@ -529,14 +529,14 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
                     "message": "No mention of data deletion or subject access rights (check GDPR compliance)."
                 })
     
-    # --------------- Анализ документа с negspaCy ----------------
-    # ОПТИМИЗИРОВАНО: батчевая обработка для экономии памяти
+    # --------------- Document analysis with negspaCy ----------------
+    # OPTIMIZED: batch processing for memory efficiency
     nlp = _get_nlp(batch_size)
 
-    # Собираем данные и документы в одном проходе
+    # Collect data and documents in single pass
     presence_all = {name: {"pos": set(), "neg": set()} for name, _ in docs_pages}
 
-    # ЕДИНСТВЕННЫЙ ПРОХОД: собираем данные и анализируем противоречия
+    # SINGLE PASS: collect data and analyze contradictions
     for file_name, pages in docs_pages:
         if nlp is not None:
             # ❷ batched NLP – keeps page info
@@ -545,21 +545,21 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
                     bucket = "neg" if ent._.negex else "pos"
                     presence_all[file_name][bucket].add((ent.text.lower(), page_no))
             
-            # Анализ внутренних противоречий в документе
+            # Analysis of internal contradictions in document
             pos_terms = {term for term, _ in presence_all[file_name]["pos"]}
             neg_terms = {term for term, _ in presence_all[file_name]["neg"]}
             internal_contradictions = pos_terms & neg_terms
             
-            # Также проверяем случаи только негативных упоминаний
+            # Also check cases of only negative mentions
             only_neg_terms = neg_terms - pos_terms
             
-            # Обрабатываем внутренние противоречия (pos ∩ neg)
+            # Process internal contradictions (pos ∩ neg)
             for term in internal_contradictions:
-                # Определяем severity: понижаем уровень только если все упоминания отрицательные
+                # Determine severity: lower level only if all mentions are negative
                 pos_mentions = [page_no for t, page_no in presence_all[file_name]["pos"] if t == term]
                 neg_mentions = [page_no for t, page_no in presence_all[file_name]["neg"] if t == term]
                 
-                # Проверяем, есть ли только негативные упоминания (без позитивных)
+                # Check if there are only negative mentions (no positive ones)
                 if not pos_mentions:  # every hit is negated
                     severity = "warning"
                 else:
@@ -572,7 +572,7 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
                     "message": message
                 })
             
-            # Обрабатываем случаи только негативных упоминаний
+            # Process cases of only negative mentions
             for term in only_neg_terms:
                 message = _create_page_aware_message(term, presence_all, file_name)
                 issues.append({
@@ -725,7 +725,7 @@ def review_documents(pdf_files: List[Path], batch_size: int = 128) -> List[dict]
         except Exception as e:
             raise RuntimeError(f"Failed to process {f}: {e}")
     
-    return analyze_documents(docs_pages, batch_size)   # <-- передаем batch_size
+    return analyze_documents(docs_pages, batch_size)   # <-- pass batch_size
 
 
 def review_single_document(pdf_file: Path) -> List[dict]:
@@ -908,25 +908,25 @@ def create_review_response(issues: List[dict], processed_files: List[str]) -> di
         }
     } 
 
-# Функция для создания сообщений с информацией о страницах
+# Function for creating messages with page information
 def _create_page_aware_message(term: str, presence_all: dict, file_name: str) -> str:
     """
-    Создает сообщение с информацией о страницах для противоречий.
+    Creates a message with page information for contradictions.
     
     Args:
-        term: Термин, для которого найдено противоречие
-        presence_all: Словарь с информацией о присутствии терминов
-        file_name: Имя файла
+        term: Term for which contradiction was found
+        presence_all: Dictionary with information about term presence
+        file_name: File name
         
     Returns:
-        Сообщение с информацией о страницах
+        Message with page information
     """
     pos_pages = [page_no for t, page_no in presence_all[file_name]["pos"] if t == term]
     neg_pages = [page_no for t, page_no in presence_all[file_name]["neg"] if t == term]
     
-    # ↓ pos_page_str/neg_page_str объявляем до return-ов
+    # ↓ pos_page_str/neg_page_str declare before returns
     if pos_pages and neg_pages:
-        # Есть и позитивные, и негативные упоминания
+        # There are both positive and negative mentions
         pos_page_str = f"page {min(pos_pages) + 1}" if len(pos_pages) == 1 else f"pages {min(pos_pages) + 1}-{max(pos_pages) + 1}"
         neg_page_str = f"page {min(neg_pages) + 1}" if len(neg_pages) == 1 else f"pages {min(neg_pages) + 1}-{max(neg_pages) + 1}"
         return f"Contradictory statements about '{term}' (affirmed on {pos_page_str}, negated on {neg_page_str})."
