@@ -16,7 +16,7 @@ SaaS/PDF unlocks with a licence key .
 ## 🚀 Quick‑start
 
 ```bash
-# 1 Install (Python 3.9+)
+# 1 Install (Python 3.9+) - includes all dependencies
 pip install annex4ac
 
 # 2 Pull the latest Annex IV layout
@@ -44,6 +44,10 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 
 # Skip validation if needed (not recommended)
 annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validation
+
+# 5 Review existing documentation (optional)
+annex4ac review annex_iv.pdf  # Analyze for compliance issues
+annex4ac review doc1.pdf doc2.pdf  # Compare multiple documents for contradictions
 ```
 
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
@@ -52,31 +56,26 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validatio
 
 ---
 
-## ✨ Features
+## 💡 Use Cases
 
-* **Always up‑to‑date** – every run pulls the latest Annex IV HTML from the official AI Act Explorer.
-* **Schema‑first** – YAML scaffold mirrors the **9 numbered sections** adopted in the July 2024 Official Journal.
-* **Fail‑fast CI** – `annex4ac validate` exits 1 when a mandatory field is missing, so a GitHub Action can block the PR.
-* **Zero binaries** – ReportLab renders the PDF; no LaTeX, no system packages.
-* **Freemium** – `fetch-schema` & `validate` are free; `generate` (PDF) requires `ANNEX4AC_LICENSE`.
-* **Built-in rule engine** – business-logic validation runs locally via pure Python.
-* **EU-compliant formatting** – proper list punctuation (semicolons and periods) and ordered list formatting (a), (b), (c) according to EU drafting rules.
-* **Retention tracking** – automatic 10-year retention period calculation and metadata embedding (Article 18 compliance).
-* **Freshness validation** – configurable document staleness (not a legal requirement, but techdoc must be kept up-to-date according to Art. 11).
-* **PDF/A-2b support** – optional archival PDF format with embedded ICC profiles for long-term preservation.
-* **Unified text processing** – consistent handling of escaped characters and list formatting across all formats (PDF/HTML/DOCX).
-* **Auto-validation** – `annex4ac generate` automatically validates YAML before generation, ensuring compliance.
-* **Compliance review** – `annex4ac review` analyzes PDF technical documentation for missing sections, contradictions, and compliance issues.
+**For Developers:**
+- Generate compliant Annex IV documentation from YAML
+- Validate documentation in CI/CD pipelines
+- Review existing PDFs for compliance issues
+
+**For Legal Teams:**
+- Ensure all 9 required sections are present
+- Check for contradictions between documents
+- Verify GDPR compliance requirements
+
+**For Enterprises:**
+- Generate archival PDF/A-2b documents
+- Track 10-year retention periods
+- Maintain up-to-date technical documentation
 
 ---
 
-## 🛠 Requirements
 
-- Python 3.9+
-- [reportlab](https://www.reportlab.com/documentation) (PDF, Pro)
-- [pydantic](https://docs.pydantic.dev) (schema validation)
-- [typer](https://typer.tiangolo.com) (CLI)
-- [pyyaml](https://pyyaml.org/) (YAML)
 
 ---
 
@@ -108,87 +107,66 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validatio
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Automatically validates before generation. PDF requires license, HTML/DOCX are free. |
-| `review`       | Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Returns structured output with errors and warnings. |
+| `review`       | Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Uses advanced NLP for intelligent negation detection. Provides detailed console output with error/warning classification. |
 
 Run `annex4ac --help` for full CLI.
 
 ---
 
-## 🆕 New Features
+## ✨ Features
 
-### Enhanced Schema Generation
-The `fetch-schema` command now generates a more comprehensive YAML template with:
-- **All mandatory fields** included with proper defaults
-- **Clear descriptions** for each field with examples
-- **Use cases from Annex III** with full list of available tags
-- **Better formatting** with proper spacing and alignment
-- **Helpful comments** explaining what each field means and how to fill it
+Generate compliant EU AI Act Annex IV documentation with advanced validation and review capabilities.
 
-### EU-Compliant List Formatting
-Lists are automatically formatted according to EU drafting rules:
-- Ordered lists: `(a) ...; (b) ...; (c) ...`
-- Unordered lists: `• ...; • ...; • ...`
-- **Hierarchical lists**: Support for nested structure with `(a)` + `-` subitems
-- Proper punctuation with semicolons and final periods
-- **Cross-format consistency**: Same list structure in PDF, HTML, and DOCX
+### Schema-First Approach
+- **Always up-to-date**: Every run pulls the latest Annex IV HTML from the official AI Act Explorer
+- **9 numbered sections**: YAML scaffold mirrors the official July 2024 format
+- **Auto-validation**: `annex4ac generate` validates before generation
+- **Fail-fast CI**: `annex4ac validate` exits 1 on errors, blocking PRs
+
+### Multiple Output Formats
+- **HTML (Free)**: Web-ready documentation
+- **DOCX (Free)**: Microsoft Word compatible
+- **PDF (Pro)**: Professional PDF with embedded fonts and metadata
+- **PDF/A-2b (Pro)**: Archival format for long-term preservation
+
+### EU-Compliant Formatting
+- **List formatting**: `(a) ...; (b) ...; (c) ...` according to EU drafting rules
+- **Hierarchical lists**: Support for nested structures
+- **Cross-format consistency**: Same formatting in PDF, HTML, and DOCX
+- **Proper punctuation**: Semicolons and final periods
+
+### Compliance Review
+- **Advanced NLP**: Uses spaCy and negspaCy for intelligent analysis
+- **Section validation**: Checks all 9 required Annex IV sections
+- **Contradiction detection**: Finds inconsistencies between documents
+- **GDPR compliance**: Analyzes data protection and privacy issues
+- **Console output**: Detailed error/warning classification
+
+## 🔧 Advanced Features
 
 ### Retention and Freshness Tracking
-- **10-year retention**: Automatic calculation and metadata embedding according to Article 18(1)
-- **Freshness heuristic**: `--stale-after N` (optional, disabled by default) or `--strict-age` for CI enforcement
-- **Environment variable**: Set `ANNEX4AC_STALE_AFTER=180` to enable stale-after by default
-- **Legal compliance**: Meets Article 18 (retention) requirements; freshness is a maintenance heuristic, not a legal requirement
-- **Legal accuracy**: Retention period calculated from `placed_on_market` date
+- **10-year retention**: Automatic calculation from `placed_on_market` date
+- **Freshness validation**: `--stale-after N` for document age checking
+- **Legal compliance**: Meets Article 18 requirements
 
-### Unified Text Processing
-All formats (PDF/HTML/DOCX) now use consistent text processing:
-- Automatic handling of escaped characters (`\\n` → `\n`)
-- Proper list detection and formatting
-- YAML flow scalar restoration
-- EU-compliant punctuation
+### Library Integration
+```python
+from annex4ac.review import review_documents, analyze_text
 
-### PDF/A-2b Archival Support
-Enable archival PDF generation with:
+# Review multiple PDF files
+issues = review_documents([Path("doc1.pdf"), Path("doc2.pdf")])
 
-```bash
-# Generate PDF/A-2b for long-term preservation
-annex4ac generate my_annex.yaml --fmt pdf --pdfa
-
-# PDF/A-2b includes:
-# - Embedded sRGB ICC profile
-# - XMP metadata
-# - ISO 19005-2:2011 compliance
-# - 10-year retention metadata
+# Analyze text content directly
+issues = analyze_text("AI system content...", "document.txt")
 ```
 
-**Legal compliance**: PDF/A-2b format ensures documents remain accessible and visually identical for decades, meeting archival requirements under Article 18 of Regulation 2024/1689.
+### HTTP API Support
+```python
+from annex4ac.review import handle_multipart_review_request
 
-### Automatic Compliance Review
-The new `review` command analyzes PDF technical documentation for compliance issues:
-
-```bash
-# Review single PDF file
-annex4ac review technical_doc.pdf
-
-# Review multiple PDF files for contradictions
-annex4ac review doc1.pdf doc2.pdf doc3.pdf
+# Handle web requests
+result = handle_multipart_review_request(headers, body)
 ```
-
-**Features:**
-- **Annex IV section validation**: Checks for all 9 required sections with specific section numbers
-- **High-risk system detection**: Identifies biometric/law enforcement systems not properly labeled as high-risk
-- **GDPR compliance analysis**: Detects indefinite data retention, missing consent/lawful basis, and missing data subject rights
-- **Contradiction detection**: Finds internal contradictions and cross-document inconsistencies
-- **Comprehensive compliance checks**: Analyzes transparency, bias detection, and security measures
-- **Cross-document analysis**: Compares system names, versions, and risk assessments across multiple documents
-- **PDF text extraction**: Supports PyPDF2, pdfplumber, and PyMuPDF for robust text extraction
-- **Legal disclaimer**: Includes appropriate disclaimers about automated analysis
-
-### Structured Response Format
-The review functionality now returns structured data with:
-- **Error/Warning classification**: Issues are categorized by severity
-- **Section mapping**: Missing Annex IV sections are tagged with specific section numbers
-- **Cross-document analysis**: Contradictions between documents are identified
-- **JSON API support**: Structured responses for integration with web applications
 
 ### List Formatting Examples
 
@@ -218,112 +196,23 @@ standards_applied: |
   - Internal AI ethics guidelines and policies
 ```
 
-Both formats are supported across all output formats (PDF, HTML, DOCX) with consistent rendering.
+### Console Output Example
+```
+============================================================
+COMPLIANCE REVIEW RESULTS
+============================================================
 
-### API Functions for HTTP Requests
+❌ ERRORS (2):
+  1. [doc1.pdf] (Section 1) Missing content for Annex IV section 1.
+  2. [doc2.pdf] (Section 5) No mention of risk management procedures.
 
-The package provides API functions for handling HTTP requests:
+⚠️  WARNINGS (1):
+  1. [doc1.pdf] No mention of transparency or explainability.
 
-```python
-from annex4ac.review import (
-    handle_multipart_review_request,
-    handle_text_review_request,
-    create_review_response
-)
-
-# Handle multipart/form-data request
-headers = {'Content-Type': 'multipart/form-data; boundary=...'}
-body = b'...'  # multipart form data
-result = handle_multipart_review_request(headers, body)
-
-# Handle text review request
-result = handle_text_review_request("AI system text content", "document.txt")
-
-# Create structured response
-response = create_review_response(issues)
+Found 3 total issue(s): 2 errors, 1 warnings
 ```
 
-**Structured Response Format:**
-```json
-{
-  "success": true,
-  "processed_files": ["doc1.pdf", "doc2.pdf"],
-  "total_files": 2,
-  "issues": [
-    {
-      "type": "error",
-      "section": "1",
-      "file": "doc1.pdf",
-      "message": "Missing content for Annex IV section 1 (system overview)."
-    },
-    {
-      "type": "warning",
-      "section": null,
-      "file": "doc1.pdf",
-      "message": "No mention of transparency or explainability."
-    }
-  ],
-  "summary": {
-    "total_issues": 2,
-    "errors": 1,
-    "warnings": 1
-  }
-}
-```
 
-**Issue Types:**
-- `"error"`: Critical issues (missing required sections, contradictions, GDPR violations)
-- `"warning"`: Potential issues (missing transparency, bias detection, etc.)
-
-**Section Numbers:**
-- `"1"` to `"9"`: Annex IV section numbers
-- `null`: Issues not tied to specific sections
-
-### Using Review Functions as a Library
-
-The review functionality can also be used programmatically as a library:
-
-```python
-from pathlib import Path
-from annex4ac.review import review_documents, analyze_text
-
-# Review multiple PDF files
-pdf_files = [Path("doc1.pdf"), Path("doc2.pdf")]
-issues = review_documents(pdf_files)
-for issue in issues:
-    print(f"{issue['type'].upper()}: {issue['message']}")
-
-# Analyze text content directly
-text_content = "This AI system processes personal data..."
-issues = analyze_text(text_content, "my_document.txt")
-for issue in issues:
-    print(f"{issue['type'].upper()}: {issue['message']}")
-```
-
-**Available Library Functions:**
-- `review_documents(pdf_files: List[Path]) -> List[dict]` - Review multiple PDF files
-- `review_single_document(pdf_file: Path) -> List[dict]` - Review a single PDF file
-- `analyze_text(text: str, filename: str = "document") -> List[dict]` - Analyze text content
-- `extract_text_from_pdf(pdf_path: Path) -> str` - Extract text from PDF (low-level)
-
-**Structured Issue Format:**
-Each issue is a dictionary with:
-- `type`: "error" or "warning"
-- `section`: "1"-"9" for Annex IV sections, `null` for general issues
-- `file`: filename or `""` for cross-document issues
-- `message`: description of the issue
-
-**Error Handling:**
-```python
-try:
-    issues = review_documents([Path("document.pdf")])
-except ImportError:
-    print("Install PDF libraries: pip install PyPDF2 pdfplumber PyMuPDF")
-except Exception as e:
-    print(f"Error: {e}")
-```
-
-See `examples/review_example.py` for complete usage examples.
 
 ---
 
@@ -412,6 +301,24 @@ python annex4ac.py --help
 | Enterprise | Custom          | Self‑hosted Docker, SLA 99.9 %, custom sections              |
 
 Pay once, use anywhere – CLI, GitHub Action, future REST API.
+
+---
+
+## 🛠 Requirements
+
+- Python 3.9+
+- [reportlab](https://www.reportlab.com/documentation) (PDF, Pro)
+- [pydantic](https://docs.pydantic.dev) (schema validation)
+- [typer](https://typer.tiangolo.com) (CLI)
+- [pyyaml](https://pyyaml.org/) (YAML)
+
+**Advanced:**
+- [spacy](https://spacy.io/) (advanced NLP analysis)
+- [negspacy](https://github.com/jenojp/negspacy) (negation detection)
+- [nltk](https://www.nltk.org/) (natural language processing)
+- [PyPDF2](https://pypdf2.readthedocs.io/) (PDF text extraction)
+- [pdfplumber](https://github.com/jsvine/pdfplumber) (PDF text extraction)
+- [PyMuPDF](https://pymupdf.readthedocs.io/) (PDF text extraction)
 
 ---
 
