@@ -451,15 +451,15 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
     
     # 1. Check Annex IV compliance: all required sections present?
     required_sections = {
-        1: "system overview",       # General system overview
-        2: "development process",   # Development process
-        3: "system monitoring",     # System monitoring
-        4: "performance metrics",   # Performance metrics
-        5: "risk management",       # Risk management
-        6: "changes and versions",  # Changes and versions
-        7: "standards applied",     # Applied standards
-        8: "compliance declaration",# Compliance declaration
-        9: "post-market",           # Post-market monitoring (partial keyword match)
+        1: ["system overview", "system overview:", "overview"],       # General system overview
+        2: ["development process", "development process:", "development"],   # Development process
+        3: ["system monitoring", "system monitoring:", "monitoring"],     # System monitoring
+        4: ["performance metrics", "performance metrics:", "performance"],   # Performance metrics
+        5: ["risk management", "risk management:", "risk"],       # Risk management
+        6: ["changes and versions", "changes and versions:", "changes", "versions"],  # Changes and versions
+        7: ["standards applied", "standards applied:", "standards"],     # Applied standards
+        8: ["compliance declaration", "compliance declaration:", "compliance"],# Compliance declaration
+        9: ["post-market", "post-market plan", "post market"],           # Post-market monitoring
     }
     
     for doc_name, pages in docs_pages:
@@ -467,15 +467,17 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
         whole_text = " ".join(pages)
         whole_text_lower = whole_text.lower()
         
-        # Check for missing required sections
-        for section_num, keyword in required_sections.items():
-            if keyword not in whole_text_lower:
+        # Check for missing required sections with flexible matching
+        for section_num, keywords in required_sections.items():
+            section_found = any(keyword in whole_text_lower for keyword in keywords)
+            if not section_found:
                 # Missing entire Annex IV section - this is an ERROR
+                primary_keyword = keywords[0]  # Use the first keyword for the error message
                 issues.append({
                     "type": "error",
                     "section": str(section_num),
                     "file": doc_name,
-                    "message": f"Missing content for Annex IV section {section_num} ({keyword})."
+                    "message": f"Missing content for Annex IV section {section_num} ({primary_keyword})."
                 })
         
         # If document is declared as high-risk, check special requirements:
@@ -511,7 +513,8 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
                 })
             
             # If no mention of legal basis or consent when collecting personal data
-            if "consent" not in whole_text_lower and "lawful basis" not in whole_text_lower:
+            lawful_basis_keywords = ["lawful basis", "legal basis", "legitimate interest", "legitimate basis"]
+            if "consent" not in whole_text_lower and not any(kw in whole_text_lower for kw in lawful_basis_keywords):
                 issues.append({
                     "type": "warning",
                     "section": None,
@@ -520,7 +523,8 @@ def analyze_documents(docs_pages: List[Tuple[str, List[str]]], batch_size: int =
                 })
             
             # If no mention of data subject rights (deletion, correction, etc.)
-            if "delete" not in whole_text_lower and "erasure" not in whole_text_lower:
+            data_rights_keywords = ["delete", "erasure", "deletion", "right to erasure", "data subject rights", "access rights", "rectification"]
+            if not any(kw in whole_text_lower for kw in data_rights_keywords):
                 issues.append({
                     "type": "warning",
                     "section": None,
