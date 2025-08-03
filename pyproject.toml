@@ -28,7 +28,8 @@ dependencies = [
   "spacy>=3.7.5",
   "negspacy>=1.0.4",
   "nltk>=3.8",
-  "anyio>=4.9"
+  "anyio>=4.9",
+  "spacy-lookups-data>=1.0",
 ]
 
 [project.scripts]
