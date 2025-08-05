@@ -91,3 +91,5 @@ Thumbs.db
 
 # Private RSA key for JWT license signing (keep secure!)
 private.pem
+licence.jwt
+license.jwt

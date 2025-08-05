@@ -46,8 +46,9 @@ annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validation
 
 # 5 Review existing documentation (optional)
-annex4ac review annex_iv.pdf  # Analyze for compliance issues
-annex4ac review doc1.pdf doc2.pdf  # Compare multiple documents for contradictions
+# Note: Review functionality has been moved to annex4nlp package
+annex4nlp annex_iv.pdf  # Analyze for compliance issues
+annex4nlp doc1.pdf doc2.pdf  # Compare multiple documents for contradictions
 ```
 
 > **License System:** Pro features require a JWT license token. Contact support to obtain your token, then set it as the `ANNEX4AC_LICENSE` environment variable. See [LICENSE_SYSTEM.md](LICENSE_SYSTEM.md) for details.
@@ -107,7 +108,7 @@ annex4ac review doc1.pdf doc2.pdf  # Compare multiple documents for contradictio
 | `fetch-schema` | Download the current Annex IV HTML, convert to YAML scaffold `annex_schema.yaml`. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Automatically validates before generation. PDF requires license, HTML/DOCX are free. |
-| `review`       | Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Uses advanced NLP for intelligent negation detection. Provides detailed console output with error/warning classification. |
+| `annex4nlp`       | Review functionality has been moved to `annex4nlp` package. Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Uses advanced NLP for intelligent negation detection. Provides detailed console output with error/warning classification.|
 
 Run `annex4ac --help` for full CLI.
 
@@ -135,7 +136,7 @@ Generate compliant EU AI Act Annex IV documentation with advanced validation and
 - **Cross-format consistency**: Same formatting in PDF, HTML, and DOCX
 - **Proper punctuation**: Semicolons and final periods
 
-### Compliance Review
+### Compliance Review: annex4nlp
 - **Advanced NLP**: Uses spaCy and negspaCy for intelligent analysis
 - **Section validation**: Checks all 9 required Annex IV sections
 - **Contradiction detection**: Finds inconsistencies between documents
@@ -148,25 +149,6 @@ Generate compliant EU AI Act Annex IV documentation with advanced validation and
 - **10-year retention**: Automatic calculation from `placed_on_market` date
 - **Freshness validation**: `--stale-after N` for document age checking
 - **Legal compliance**: Meets Article 18 requirements
-
-### Library Integration
-```python
-from annex4ac.review import review_documents, analyze_text
-
-# Review multiple PDF files
-issues = review_documents([Path("doc1.pdf"), Path("doc2.pdf")])
-
-# Analyze text content directly
-issues = analyze_text("AI system content...", "document.txt")
-```
-
-### HTTP API Support
-```python
-from annex4ac.review import handle_multipart_review_request
-
-# Handle web requests
-result = handle_multipart_review_request(headers, body)
-```
 
 ### List Formatting Examples
 
@@ -311,14 +293,6 @@ Pay once, use anywhere – CLI, GitHub Action, future REST API.
 - [pydantic](https://docs.pydantic.dev) (schema validation)
 - [typer](https://typer.tiangolo.com) (CLI)
 - [pyyaml](https://pyyaml.org/) (YAML)
-
-**Advanced:**
-- [spacy](https://spacy.io/) (advanced NLP analysis)
-- [negspacy](https://github.com/jenojp/negspacy) (negation detection)
-- [nltk](https://www.nltk.org/) (natural language processing)
-- [PyPDF2](https://pypdf2.readthedocs.io/) (PDF text extraction)
-- [pdfplumber](https://github.com/jsvine/pdfplumber) (PDF text extraction)
-- [PyMuPDF](https://pymupdf.readthedocs.io/) (PDF text extraction)
 
 ---
 
