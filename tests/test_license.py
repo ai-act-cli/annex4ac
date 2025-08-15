@@ -7,6 +7,7 @@ import os
 import time
 import tempfile
 import pytest
+import click
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -16,7 +17,7 @@ import jwt
 # Import the function to test
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from annex4ac import _check_license
+from annex4ac.annex4ac import _check_license
 
 def generate_test_keys():
     """Generate test RSA key pair."""
@@ -144,9 +145,9 @@ def test_expired_license():
             os.environ["ANNEX4AC_LICENSE"] = token
             
             # Should raise typer.Exit(1) for expired license
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(click.exceptions.Exit) as exc_info:
                 _check_license()
-            assert exc_info.value.code == 1
+            assert exc_info.value.exit_code == 1
             
         finally:
             importlib.resources.files = original_files
@@ -180,9 +181,9 @@ def test_invalid_plan():
             os.environ["ANNEX4AC_LICENSE"] = token
             
             # Should raise typer.Exit(1) for invalid plan
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(click.exceptions.Exit) as exc_info:
                 _check_license()
-            assert exc_info.value.code == 1
+            assert exc_info.value.exit_code == 1
             
         finally:
             importlib.resources.files = original_files

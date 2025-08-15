@@ -33,9 +33,8 @@ import sys
 import json
 import tempfile
 import re
-import ftfy
 from pathlib import Path
-from typing import Dict, Literal, List
+from typing import Dict, Literal, List, Optional
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_dt
@@ -56,11 +55,12 @@ from reportlab.pdfbase.ttfonts import TTFont
 from .policy.annex4ac_validate import validate_payload
 import unicodedata
 from .docx_generator import render_docx
-
-import re
 from ftfy import fix_text
 from markupsafe import escape, Markup
+from platformdirs import user_cache_dir
 from .constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
+from .config import Settings
+from .db import get_session, load_annex_iv_from_db, get_schema_version_from_db
 
 
 
@@ -132,7 +132,7 @@ def listify(text: str) -> Markup:
 
     # Current top-level "block"
     ol_items: list[dict] = []   # [{'head': str, 'bullets': [str,...]}]
-    current: dict | None = None
+    current: Optional[dict] = None
 
     def punctuate(arr: list[str]) -> list[str]:
         arr = [s.rstrip(" ;.") for s in arr]
@@ -766,15 +766,14 @@ def _check_freshness(dt, max_days=None, strict=False):
             typer.secho(f"[WARNING] {msg}", fg=typer.colors.YELLOW)
 
 def _validate_payload(payload, sarif_path=None, yaml_path=None):
-    """
-    Offline validation via pure Python rule engine.
+    """Offline validation via pure Python rule engine.
+
+    Returns a list of violations; caller handles SARIF emission so additional
+    rules can append to the list before writing once.
     """
     denies, warns = validate_payload(payload)
     violations = list(denies)
     warnings = list(warns)
-
-    if sarif_path and violations:
-        _write_sarif(violations, sarif_path, yaml_path)
 
     # Print warnings for limited/minimal risk systems
     for w in warnings:
@@ -859,7 +858,7 @@ def _check_license():
 
     # 2) Public key dictionary (ready for rotation)
     pub_map = {
-        "2025-01": Path(__file__).parent.joinpath("lic_pub.pem").read_text()
+        "2025-01": files(__package__).joinpath("lic_pub.pem").read_text()
     }
 
     key = pub_map.get(kid)
@@ -867,14 +866,21 @@ def _check_license():
         typer.secho(f"No public key for kid={kid}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-    claims = jwt.decode(
-        token,
-        key,
-        algorithms=["RS256"],              # Hardcode algorithm for security
-        issuer="annex4ac.io",
-        audience="annex4ac-cli",
-        options={"require": ["exp", "iat", "iss", "aud"]}
-    )
+    try:
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],  # Hardcode algorithm for security
+            issuer="annex4ac.io",
+            audience="annex4ac-cli",
+            options={"require": ["exp", "iat", "iss", "aud"]},
+        )
+    except jwt.ExpiredSignatureError:
+        typer.secho("License expired", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except jwt.PyJWTError as exc:
+        typer.secho(f"License error: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
     # 3) Check expiration and plan
     if claims["exp"] < time.time():
@@ -912,14 +918,26 @@ def update_high_risk_tags_json():
 # -----------------------------------------------------------------------------
 
 @app.command()
-def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False), offline: bool = typer.Option(False, help="Use offline cache if available")):
+def fetch_schema(
+    output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False),
+    offline: bool = typer.Option(False, help="Use offline cache if available"),
+    db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
+    celex_id: str = typer.Option("32024R1689", help="CELEX id"),
+    source_preference: str = typer.Option(None, help="db_only|web_only|db_then_web"),
+):
     """Download the latest Annex IV text and convert to YAML scaffold."""
     import datetime
     import requests
     from pathlib import Path as SysPath
     from shutil import copyfile
     import yaml as pyyaml
-    cache_dir = os.path.expanduser("~/.cache/annex4ac/")
+
+    settings = Settings()
+    db_url = db_url or settings.db_url
+    celex_id = celex_id or settings.celex_id
+    source_preference = source_preference or settings.source_preference
+
+    cache_dir = user_cache_dir("annex4ac")
     os.makedirs(cache_dir, exist_ok=True)
     cache_path = os.path.join(cache_dir, "schema-latest.yaml")
     try:
@@ -931,17 +949,41 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
             else:
                 typer.secho("No offline cache found.", fg=typer.colors.RED)
                 raise typer.Exit(1)
-        r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
-        html = r.text
-        data = _parse_annex_iv(html)
-        data["_schema_version"] = SCHEMA_VERSION
+
+        try_db_first = (source_preference != "web_only") and bool(db_url)
+        data = None
+        schema_version = None
+
+        if try_db_first:
+            try:
+                with get_session(db_url) as ses:
+                    data = load_annex_iv_from_db(ses, celex_id=celex_id)
+                    schema_version = get_schema_version_from_db(ses, celex_id=celex_id)
+            except Exception:
+                typer.secho(
+                    "[DB] fallback to web (connection failed or CELEX not found)",
+                    fg=typer.colors.YELLOW,
+                )
+
+        if source_preference == "db_only" and not data:
+            typer.secho(
+                "DB not reachable or CELEX not found. Check ANNEX4AC_DB_URL, network, and permissions, or switch to --source-preference web_only.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(2)
+
+        if not data:
+            r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
+            html = r.text
+            data = _parse_annex_iv(html)
+
+        data["_schema_version"] = schema_version or SCHEMA_VERSION
         _write_yaml(data, output)
-        # Save to cache
         with open(output, "r", encoding="utf-8") as src, open(cache_path, "w", encoding="utf-8") as dst:
             dst.write(src.read())
         typer.secho(f"Schema written to {output}", fg=typer.colors.GREEN)
     except Exception as e:
-        # If network error — try cache
         if os.path.exists(cache_path):
             typer.secho(f"Network error, using offline cache: {e}", fg=typer.colors.YELLOW)
             copyfile(cache_path, output)
@@ -950,22 +992,49 @@ def fetch_schema(output: Path = typer.Argument(Path("annex_schema.yaml"), exists
             raise typer.Exit(1)
 
 @app.command()
-def validate(input: Path = typer.Argument(..., exists=True, help="Your filled Annex IV YAML"), sarif: Path = typer.Option(None, help="Write SARIF report to this file"), stale_after: int = typer.Option(0, help="Warn if last_updated older than N days (0=off)", show_default=False), strict_age: bool = typer.Option(False, help="Exit 1 if stale_after is exceeded")):
+def validate(
+    input: Path = typer.Argument(..., exists=True, help="Your filled Annex IV YAML"),
+    sarif: Path = typer.Option(None, help="Write SARIF report to this file"),
+    stale_after: int = typer.Option(0, help="Warn if last_updated older than N days (0=off)", show_default=False),
+    strict_age: bool = typer.Option(False, help="Exit 1 if stale_after is exceeded"),
+    use_db: bool = typer.Option(False, help="Cross-check sections against DB"),
+    db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
+    celex_id: str = typer.Option("32024R1689", help="CELEX id"),
+):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
-    # Check environment variable for default stale_after
     if stale_after == 0:
         stale_after = int(os.getenv("ANNEX4AC_STALE_AFTER", "0"))
     try:
+        settings = Settings()
+        db_url = db_url or settings.db_url
+        celex_id = celex_id or settings.celex_id
+
         from ruamel.yaml import YAML
         yaml_ruamel = YAML(typ="rt")
         with input.open("r", encoding="utf-8") as f:
             payload = yaml_ruamel.load(f)
+
         violations = _validate_payload(payload, sarif_path=sarif, yaml_path=str(input))
+
+        if use_db and db_url:
+            with get_session(db_url) as ses:
+                db_schema = load_annex_iv_from_db(ses, celex_id=celex_id)
+            for _, key in SECTION_MAPPING:
+                if db_schema.get(key) and (not payload.get(key) or not str(payload.get(key)).strip()):
+                    violations.append({
+                        "rule": f"{key}_required",
+                        "msg": f"Annex IV requires content for '{key}' (per current DB snapshot).",
+                    })
+
+        if sarif and violations:
+            _write_sarif(violations, sarif, str(input))
+
         if violations:
             for v in violations:
                 typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
             raise typer.Exit(1)
-        model = AnnexIVSchema(**payload)  # triggers pydantic validation
+
+        model = AnnexIVSchema(**payload)
         _check_freshness(model.last_updated, max_days=stale_after, strict=strict_age)
     except (ValidationError, Exception) as exc:
         typer.secho("Validation failed:\n" + str(exc), fg=typer.colors.RED, err=True)
@@ -977,18 +1046,27 @@ def generate(
     input: Path = typer.Argument(..., help="YAML input file"),
     output: Path = typer.Option(None, help="Output file name"),
     fmt: str = typer.Option("pdf", help="pdf | html | docx"),
-    pdfa: bool = typer.Option(False, help="Convert PDF to PDF/A-2b format for archival")
+    pdfa: bool = typer.Option(False, help="Convert PDF to PDF/A-2b format for archival"),
+    skip_validation: bool = typer.Option(False, help="Don't validate before rendering"),
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
-    
+
+    if not skip_validation:
+        violations = _validate_payload(payload, yaml_path=str(input))
+        if violations:
+            for v in violations:
+                typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
+            raise typer.Exit(1)
+        AnnexIVSchema(**payload)
+
     # Build unified metadata for all formats (includes retention calculation)
     meta = _build_doc_meta(payload)
-    
+
     # Automatically determine output filename
     if output is None:
         output = input.with_suffix(f".{fmt}")
-    
+
     # License check for Pro features (PDF requires license)
     if fmt == "pdf":
         _check_license()
