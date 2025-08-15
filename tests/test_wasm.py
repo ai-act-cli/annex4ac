@@ -1,6 +1,6 @@
 import pytest
 import yaml
-from policy.annex4ac_validate import validate_payload
+from annex4ac.policy.annex4ac_validate import validate_payload
 from annex4ac import fetch_annex3_tags
 
 # Check for errors and warnings

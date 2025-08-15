@@ -1,5 +1,6 @@
-from .annex4ac import app
+from .annex4ac import app, fetch_annex3_tags
 
 __all__ = [
-    'app'
-] 
+    "app",
+    "fetch_annex3_tags",
+]
