@@ -118,8 +118,8 @@ except ImportError:
 
 # Regular expressions for parsing lists
 BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
-SUBPOINT_RE = re.compile(r'^\s*\(([a-z])\)\s+', re.I)  # (a), (b)...
-TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*•]|\d+\.)\s+')
+SUBPOINT_RE = re.compile(r'^\s*\(([a-h])\)\s+', re.I)  # (a)...(h); avoids roman (i)
+TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*•]|\d+[\.)])\s+')
 ROMAN_RE = re.compile(r'^\s*\(([ivxlcdm]+)\)\s+', re.I)
 
 
@@ -127,7 +127,7 @@ def _normalize_lines(text: str) -> list[str]:
     if not text:
         return []
     text = fix_text(text)
-    text = text.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\n')
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
     return [ln.rstrip() for ln in text.splitlines()]
 
 
