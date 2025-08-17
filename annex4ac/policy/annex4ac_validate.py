@@ -9,28 +9,23 @@ Replaces Rego-based OPA rules with pure-Python logic.
 import sys
 import json
 import yaml
-# Add import for dynamic high risk tags loading
+from importlib.resources import files
+
 try:
-    from annex4ac import fetch_annex3_tags
-except ImportError:
-    fetch_annex3_tags = None
+    from annex4ac.tags import fetch_annex3_tags
+    HIGH_RISK_TAGS = fetch_annex3_tags()
+except Exception:
+    data = (
+        files("annex4ac")
+        .joinpath("resources/high_risk_tags.default.json")
+        .read_text(encoding="utf-8")
+    )
+    HIGH_RISK_TAGS = set(json.loads(data))
+
 
 # -----------------------------------------------------------------------------
 # Configuration of rules (translated from Rego)
 # -----------------------------------------------------------------------------
-
-# Dynamic HIGH_RISK_TAGS loading with fallback
-try:
-    if fetch_annex3_tags:
-        HIGH_RISK_TAGS = fetch_annex3_tags()
-    else:
-        raise Exception("fetch_annex3_tags not available")
-except Exception:
-    HIGH_RISK_TAGS = {
-        "employment_screening", "biometric_id", "critical_infrastructure",
-        "education_scoring", "justice_decision", "migration_control",
-        "essential_services", "law_enforcement",
-    }
 
 PROHIBITED_TAGS = {
     "social_scoring",

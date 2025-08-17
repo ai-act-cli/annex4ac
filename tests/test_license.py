@@ -7,6 +7,7 @@ import os
 import time
 import tempfile
 import pytest
+import click
 from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -16,7 +17,7 @@ import jwt
 # Import the function to test
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from annex4ac import _check_license
+from annex4ac.annex4ac import _check_license
 
 def generate_test_keys():
     """Generate test RSA key pair."""
@@ -77,17 +78,17 @@ def test_license_validation():
         # Write public key
         (annex4ac_dir / "lic_pub.pem").write_text(public_key)
         
-        # Mock importlib.resources.files
-        import importlib.resources
-        original_files = importlib.resources.files
-        
+        # Mock resource loader
+        import annex4ac.annex4ac as cli_mod
+        original_files = cli_mod.files
+
         def mock_files(package_name):
             class MockFiles:
                 def joinpath(self, path):
                     return Path(annex4ac_dir) / path
             return MockFiles()
-        
-        importlib.resources.files = mock_files
+
+        cli_mod.files = mock_files
         
         try:
             # Set environment variable
@@ -98,7 +99,7 @@ def test_license_validation():
             
         finally:
             # Restore original function
-            importlib.resources.files = original_files
+            cli_mod.files = original_files
             if "ANNEX4AC_LICENSE" in os.environ:
                 del os.environ["ANNEX4AC_LICENSE"]
 
@@ -129,27 +130,27 @@ def test_expired_license():
         annex4ac_dir.mkdir()
         (annex4ac_dir / "lic_pub.pem").write_text(public_key)
         
-        import importlib.resources
-        original_files = importlib.resources.files
-        
+        import annex4ac.annex4ac as cli_mod
+        original_files = cli_mod.files
+
         def mock_files(package_name):
             class MockFiles:
                 def joinpath(self, path):
                     return Path(annex4ac_dir) / path
             return MockFiles()
-        
-        importlib.resources.files = mock_files
+
+        cli_mod.files = mock_files
         
         try:
             os.environ["ANNEX4AC_LICENSE"] = token
             
             # Should raise typer.Exit(1) for expired license
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(click.exceptions.Exit) as exc_info:
                 _check_license()
-            assert exc_info.value.code == 1
+            assert exc_info.value.exit_code == 1
             
         finally:
-            importlib.resources.files = original_files
+            cli_mod.files = original_files
             if "ANNEX4AC_LICENSE" in os.environ:
                 del os.environ["ANNEX4AC_LICENSE"]
 
@@ -165,27 +166,27 @@ def test_invalid_plan():
         annex4ac_dir.mkdir()
         (annex4ac_dir / "lic_pub.pem").write_text(public_key)
         
-        import importlib.resources
-        original_files = importlib.resources.files
-        
+        import annex4ac.annex4ac as cli_mod
+        original_files = cli_mod.files
+
         def mock_files(package_name):
             class MockFiles:
                 def joinpath(self, path):
                     return Path(annex4ac_dir) / path
             return MockFiles()
-        
-        importlib.resources.files = mock_files
+
+        cli_mod.files = mock_files
         
         try:
             os.environ["ANNEX4AC_LICENSE"] = token
             
             # Should raise typer.Exit(1) for invalid plan
-            with pytest.raises(SystemExit) as exc_info:
+            with pytest.raises(click.exceptions.Exit) as exc_info:
                 _check_license()
-            assert exc_info.value.code == 1
+            assert exc_info.value.exit_code == 1
             
         finally:
-            importlib.resources.files = original_files
+            cli_mod.files = original_files
             if "ANNEX4AC_LICENSE" in os.environ:
                 del os.environ["ANNEX4AC_LICENSE"]
 
