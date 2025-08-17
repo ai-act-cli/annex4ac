@@ -380,7 +380,7 @@ class AnnexIVSection(BaseModel):
 class AnnexIVSchema(BaseModel):
     enterprise_size: Literal["sme", "mid", "large"]  # Art. 11 exemption - all sizes get full 9 sections
     risk_level: Literal["high", "limited", "minimal"]
-    use_cases: List[str] = []  # list of tags from Annex III
+    use_cases: List[str] = Field(default_factory=list)  # list of tags from Annex III
     system_overview: str
     development_process: str
     system_monitoring: str
