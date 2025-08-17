@@ -23,10 +23,16 @@ pip install annex4ac  # pulls SQLAlchemy 2.x and psycopg[binary]
 # 2 Pull the latest Annex IV layout
 annex4ac fetch-schema annex_template.yaml
 # Optional: fetch from a local PostgreSQL snapshot (SQLAlchemy URL with psycopg3)
-# export ANNEX4AC_DB_URL="postgresql+psycopg://user:pass@host:5432/ai_act"
+# export ANNEX4AC_DB_URL="postgresql+psycopg://user:pass@host:5432/ai_act"  # see https://docs.sqlalchemy.org/en/20/dialects/postgresql.html
 # annex4ac fetch-schema --db-url "$ANNEX4AC_DB_URL" annex_template.yaml
 # annex4ac fetch-schema --db-url "$ANNEX4AC_DB_URL" --source-preference db_only annex_template.yaml  # fail if DB missing
 # (Database mode is currently tested only with PostgreSQL.)
+
+| `--source-preference` | Behaviour |
+| --------------------- | ---------- |
+| `db_only`             | Use DB only; exit code 2 if unreachable or CELEX missing |
+| `web_only`            | Ignore DB and fetch from the official website |
+| `db_then_web` (default) | Try DB first, fall back to web on error |
 
 # 3 Fill in the YAML → validate
 cp annex_template.yaml my_annex.yaml
@@ -114,7 +120,8 @@ annex4nlp doc1.pdf doc2.pdf  # Compare multiple documents for contradictions
 | Command        | What it does                                                                  |
 | -------------- | ----------------------------------------------------------------------------- |
 | `fetch-schema` | Download the current Annex IV scaffold from the web or a PostgreSQL DB (`--db-url`, `--source-preference`). |
-| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking.             |
+| `update-annex3-cache` | Refresh cached Annex III high-risk tags stored under the user cache directory. |
+| `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking. |
 | `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Validates by default (`--skip-validation` to bypass). PDF requires license, HTML/DOCX are free. |
 | `annex4nlp`       | Review functionality has been moved to `annex4nlp` package. Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Uses advanced NLP for intelligent negation detection. Provides detailed console output with error/warning classification.|
 
@@ -208,7 +215,7 @@ Found 3 total issue(s): 2 errors, 1 warnings
 
 ## 🏷️ High-risk tags (Annex III)
 
-The list of high-risk tags (Annex III) is now loaded dynamically from the official website. If the network is unavailable, a cache or packaged fallback list is used. To refresh the local cache manually, run `annex4ac update-annex3-cache`. This affects the auto_high_risk logic in validation.
+The list of high-risk tags (Annex III) is now loaded dynamically from the official website. If the network is unavailable, a cache or packaged fallback list is used. The cache lives in the user cache directory (e.g., `~/.cache/annex4ac` on Linux) via `platformdirs`. Refresh it manually with `annex4ac update-annex3-cache`. This affects the auto_high_risk logic in validation.
 
 ---
 

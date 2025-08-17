@@ -1011,12 +1011,31 @@ def validate(
         if use_db and db_url:
             with get_session(db_url) as ses:
                 db_schema = load_annex_iv_from_db(ses, celex_id=celex_id)
+            def _extract_subpoints(text: str) -> list[str]:
+                letters: list[str] = []
+                for line in text.splitlines():
+                    m = SUBPOINT_RE.match(line)
+                    if m:
+                        letters.append(m.group(1).lower())
+                return letters
+
             for _, key in SECTION_MAPPING:
-                if db_schema.get(key) and (not payload.get(key) or not str(payload.get(key)).strip()):
+                db_text = db_schema.get(key)
+                user_text = str(payload.get(key) or "").strip()
+                if not db_text:
+                    continue
+                if not user_text:
                     violations.append({
                         "rule": f"{key}_required",
                         "msg": f"Annex IV requires content for '{key}' (per current DB snapshot).",
                     })
+                    continue
+                for letter in _extract_subpoints(db_text):
+                    if not re.search(rf"\({letter}\)", user_text, re.I):
+                        violations.append({
+                            "rule": f"{key}_{letter}_required",
+                            "msg": f"Section '{key}' requires subpoint ({letter}) (per current DB snapshot).",
+                        })
 
         if sarif and violations:
             _write_sarif(violations, sarif, str(input))
