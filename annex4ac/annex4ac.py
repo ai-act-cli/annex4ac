@@ -889,7 +889,7 @@ def _check_license():
         typer.secho(f"License plan '{plan}' insufficient for PDF generation", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-@app.command()
+@app.command("update-annex3-cache")
 def update_annex3_cache():
     """Force-update cached Annex III high-risk tags."""
     tags = fetch_annex3_tags(cache_days=0)
