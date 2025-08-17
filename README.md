@@ -17,7 +17,8 @@ SaaS/PDF unlocks with a licence key .
 
 ```bash
 # 1 Install (Python 3.9+) - includes all dependencies
-pip install annex4ac
+pip install annex4ac  # pulls SQLAlchemy 2.x and psycopg[binary]
+# On Alpine, install build tools (e.g., gcc) before pip install
 
 # 2 Pull the latest Annex IV layout
 annex4ac fetch-schema annex_template.yaml

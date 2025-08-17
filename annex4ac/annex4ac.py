@@ -762,8 +762,9 @@ def _check_freshness(dt, max_days=None, strict=False):
 def _validate_payload(payload):
     """Offline validation via pure Python rule engine.
 
-    Returns a list of violations; caller handles SARIF emission so additional
-    rules can append to the list before writing once.
+    Returns ``(violations, warnings)`` so callers can append extra rules to
+    ``violations`` before writing SARIF once. Warnings are printed but also
+    returned for callers that need them.
     """
     denies, warns = validate_payload(payload)
     violations = list(denies)
@@ -773,7 +774,7 @@ def _validate_payload(payload):
     for w in warnings:
         typer.secho(f"[WARNING] {w['rule']}: {w['msg']}", fg=typer.colors.YELLOW)
 
-    return violations
+    return violations, warnings
 
 # SARIF: template for passing region (line/col)
 def _write_sarif(violations, sarif_path, yaml_path):
@@ -1027,7 +1028,7 @@ def validate(
         with input.open("r", encoding="utf-8") as f:
             payload = yaml_ruamel.load(f)
 
-        violations = _validate_payload(payload)
+        violations, _warnings = _validate_payload(payload)
 
         if use_db and db_url:
             with get_session(db_url) as ses:
@@ -1066,7 +1067,7 @@ def generate(
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
 
     if not skip_validation:
-        violations = _validate_payload(payload)
+        violations, _warnings = _validate_payload(payload)
         if violations:
             for v in violations:
                 typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)

@@ -20,7 +20,7 @@ def test_validate_db_sarif(monkeypatch, tmp_path):
 
     monkeypatch.setattr("annex4ac.annex4ac.get_session", fake_get_session)
     monkeypatch.setattr("annex4ac.annex4ac.load_annex_iv_from_db", fake_load_annex_iv_from_db)
-    monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda payload: [])
+    monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda payload: ([], []))
 
     yml = tmp_path / "in.yaml"
     yml.write_text("system_overview: ''\n")
