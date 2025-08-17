@@ -61,7 +61,12 @@ from markupsafe import escape, Markup
 from platformdirs import user_cache_dir
 from .constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
 from .config import Settings
-from .db import get_session, load_annex_iv_from_db, get_schema_version_from_db
+from .db import (
+    get_session,
+    load_annex_iv_from_db,
+    get_schema_version_from_db,
+    get_expected_top_counts,
+)
 from .tags import fetch_annex3_tags
 
 
@@ -117,8 +122,10 @@ except ImportError:
     PIKEPDF_AVAILABLE = False
 
 # Regular expressions for parsing lists
+"""Regular expressions for parsing list structures in Annex IV text."""
 BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\u00B7\u2013\u2014\-\*])\s+')
-SUBPOINT_RE = re.compile(r'^\s*\(([a-h])\)\s+', re.I)  # (a)...(h); avoids roman (i)
+# allow any letter a-z; roman numerals filtered separately via ROMAN_RE
+SUBPOINT_RE = re.compile(r'^\s*\(([a-z])\)\s+', re.I)
 TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*\u2022\u25AA\u00B7\u2013\u2014]|\d+[\.)])\s+')
 ROMAN_RE = re.compile(r'^\s*\(([ivxlcdm]+)\)\s+', re.I)
 
@@ -134,7 +141,11 @@ def _normalize_lines(text: str) -> list[str]:
 def _count_subpoints_db(db_text: str) -> tuple[int, int]:
     """Return (N_top, N_sub_of_first) for canonical Annex IV text from DB."""
     lines = _normalize_lines(db_text)
-    letters_idx = [i for i, ln in enumerate(lines) if SUBPOINT_RE.match(ln)]
+    letters_idx = [
+        i
+        for i, ln in enumerate(lines)
+        if SUBPOINT_RE.match(ln) and not ROMAN_RE.match(ln)
+    ]
     if letters_idx:
         n_top = len(letters_idx)
         start = letters_idx[0]
@@ -176,7 +187,11 @@ def _count_subpoints_db(db_text: str) -> tuple[int, int]:
 def _count_subpoints_user(user_text: str) -> tuple[int, int]:
     """Return (N_top, N_sub_of_first) for user-provided section text."""
     lines = _normalize_lines(user_text)
-    letters = [i for i, ln in enumerate(lines) if SUBPOINT_RE.match(ln)]
+    letters = [
+        i
+        for i, ln in enumerate(lines)
+        if SUBPOINT_RE.match(ln) and not ROMAN_RE.match(ln)
+    ]
     if letters:
         n_top = len(letters)
         start = letters[0]
@@ -1113,6 +1128,7 @@ def validate(
         if use_db and db_url:
             with get_session(db_url) as ses:
                 db_schema = load_annex_iv_from_db(ses, celex_id=celex_id)
+                exp_top_counts = get_expected_top_counts(ses, celex_id=celex_id)
             for _, key in SECTION_MAPPING:
                 db_text = (db_schema.get(key) or "").strip()
                 user_text = str(payload.get(key) or "").strip()
@@ -1124,7 +1140,8 @@ def validate(
                         "msg": f"Annex IV requires content for '{key}' (per DB snapshot).",
                     })
                     continue
-                exp_top, exp_sub = _count_subpoints_db(db_text)
+                exp_top = exp_top_counts.get(key, 0)
+                exp_sub = _count_subpoints_db(db_text)[1]
                 got_top, got_sub = _count_subpoints_user(user_text)
                 if exp_top >= 2 and got_top < exp_top:
                     violations.append({

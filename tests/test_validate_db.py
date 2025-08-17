@@ -21,6 +21,7 @@ def test_validate_db_sarif(monkeypatch, tmp_path):
     monkeypatch.setattr("annex4ac.annex4ac.get_session", fake_get_session)
     monkeypatch.setattr("annex4ac.annex4ac.load_annex_iv_from_db", fake_load_annex_iv_from_db)
     monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda payload: ([], []))
+    monkeypatch.setattr("annex4ac.annex4ac.get_expected_top_counts", lambda s, celex_id: {})
 
     yml = tmp_path / "in.yaml"
     yml.write_text("system_overview: ''\n")
@@ -64,6 +65,10 @@ def test_validate_db_subpoints(monkeypatch, tmp_path):
     monkeypatch.setattr("annex4ac.annex4ac.get_session", fake_get_session)
     monkeypatch.setattr("annex4ac.annex4ac.load_annex_iv_from_db", fake_load_annex_iv_from_db)
     monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda payload: ([], []))
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.get_expected_top_counts",
+        lambda s, celex_id: {"system_overview": 2},
+    )
 
     yml = tmp_path / "in.yaml"
     # User supplies only one bullet -> insufficient
@@ -100,6 +105,10 @@ def test_validate_db_counts_ok(monkeypatch, tmp_path):
         lambda s, celex_id: {"system_overview": "(a) foo\n  - x\n  - y\n(b) bar"},
     )
     monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda p: ([], []))
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.get_expected_top_counts",
+        lambda s, celex_id: {"system_overview": 2},
+    )
     class DummyModel:
         last_updated = "2024-01-01"
     monkeypatch.setattr("annex4ac.annex4ac.AnnexIVSchema", lambda **p: DummyModel())
@@ -138,6 +147,10 @@ def test_validate_db_numbered_ok(monkeypatch, tmp_path):
         lambda s, celex_id: {"system_overview": "(a) foo\n(b) bar"},
     )
     monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda p: ([], []))
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.get_expected_top_counts",
+        lambda s, celex_id: {"system_overview": 2},
+    )
     class DummyModel:
         last_updated = "2024-01-01"
 
@@ -177,6 +190,10 @@ def test_validate_db_roman_subsub(monkeypatch, tmp_path):
         lambda s, celex_id: {"system_overview": "(a) foo\n  (i) x\n  (ii) y\n(b) bar"},
     )
     monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda p: ([], []))
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.get_expected_top_counts",
+        lambda s, celex_id: {"system_overview": 2},
+    )
 
     yml = tmp_path / "in.yaml"
     # User provides only one roman nested item

@@ -135,6 +135,34 @@ def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[st
         out[key] = "\n\n".join([ln for ln in lines if ln])
     return out
 
+
+def get_expected_top_counts(ses: Session, celex_id: str = "32024R1689") -> Dict[str, int]:
+    """Return expected number of top-level subpoints per section key.
+
+    Counts children of the form ``AnnexIV.N.<letter>`` in the ``rules`` table
+    and maps them to the corresponding section key (``SECTION_KEYS[N-1]``).
+    """
+    reg_id = ses.execute(
+        select(Regulation.id).where(Regulation.celex_id == celex_id)
+    ).scalar_one_or_none()
+    if not reg_id:
+        raise ValueError(f"CELEX {celex_id} not found")
+
+    rows = ses.execute(
+        select(Rule.section_code)
+        .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV.%"))
+    ).scalars().all()
+
+    counts: dict[str, int] = defaultdict(int)
+    for sc in rows:
+        m = re.match(r"^AnnexIV\.(\d+)\.([a-z])$", sc, re.I)
+        if not m:
+            continue
+        n = int(m.group(1))
+        if 1 <= n <= len(SECTION_KEYS):
+            counts[SECTION_KEYS[n - 1]] += 1
+    return dict(counts)
+
 def get_schema_version_from_db(ses: Session, celex_id: str = "32024R1689") -> Optional[str]:
     return ses.execute(
         select(Regulation.version).where(Regulation.celex_id == celex_id)
