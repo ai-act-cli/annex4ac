@@ -1030,7 +1030,7 @@ def fetch_schema(
     output: Path = typer.Argument(Path("annex_schema.yaml"), exists=False),
     offline: bool = typer.Option(False, help="Use offline cache if available"),
     db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
-    celex_id: str = typer.Option("32024R1689", help="CELEX id"),
+    celex_id: Optional[str] = typer.Option(None, help="CELEX id (optional)"),
     source_preference: Optional[SourcePref] = typer.Option(
         None, help="db_only|web_only|db_then_web"
     ),
@@ -1076,7 +1076,7 @@ def fetch_schema(
 
         if source_preference == "db_only" and not data:
             typer.secho(
-                "DB not reachable or CELEX not found. Check ANNEX4AC_DB_URL, network, and permissions, or switch to --source-preference web_only.",
+                "DB not reachable or regulation not found. Check ANNEX4AC_DB_URL or switch to --source-preference web_only.",
                 fg=typer.colors.RED,
                 err=True,
             )
@@ -1111,7 +1111,7 @@ def validate(
     strict_age: bool = typer.Option(False, help="Exit 1 if stale_after is exceeded"),
     use_db: bool = typer.Option(False, help="Cross-check sections against DB"),
     db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
-    celex_id: str = typer.Option("32024R1689", help="CELEX id"),
+    celex_id: Optional[str] = typer.Option(None, help="CELEX id (optional)"),
     explain: bool = typer.Option(False, help="Show which subpoints are missing when using --use-db"),
 ):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""

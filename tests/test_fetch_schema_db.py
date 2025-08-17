@@ -15,10 +15,10 @@ def test_fetch_schema_db(monkeypatch, tmp_path):
     def fake_get_session(url):
         return DummySession()
 
-    def fake_load_annex_iv_from_db(ses, celex_id):
+    def fake_load_annex_iv_from_db(ses, regulation_id=None, celex_id=None):
         return {"system_overview": "stub"}
 
-    def fake_get_schema_version_from_db(ses, celex_id):
+    def fake_get_schema_version_from_db(ses, regulation_id=None, celex_id=None):
         return "20240101"
 
     monkeypatch.setattr("annex4ac.annex4ac.get_session", fake_get_session)

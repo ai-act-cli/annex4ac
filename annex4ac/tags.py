@@ -1,11 +1,13 @@
 from __future__ import annotations
 import os
 import json
+import os
 from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
 from importlib.resources import files
 from platformdirs import user_cache_dir
+from typing import Optional, Set
 
 
 def slugify(text: str) -> str:
@@ -34,7 +36,7 @@ def _fetch_html(url: str) -> str:
     return r.text
 
 
-def fetch_annex3_tags(cache_path: str | None = None, cache_days: int = 14) -> set[str]:
+def fetch_annex3_tags(cache_path: Optional[str] = None, cache_days: int = 14) -> Set[str]:
     """Return a set of Annex III high-risk tags with caching and packaged fallback."""
     cache_dir = os.path.dirname(cache_path) if cache_path else user_cache_dir("annex4ac")
     os.makedirs(cache_dir, exist_ok=True)

@@ -3,6 +3,7 @@ import re
 from collections import defaultdict
 from contextlib import contextmanager
 from functools import lru_cache
+from datetime import datetime
 from typing import Dict, Iterator, Optional, List, Tuple
 
 from sqlalchemy import (
@@ -13,6 +14,8 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     func,
+    case,
+    literal_column,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 from sqlalchemy.sql import nulls_last
@@ -26,8 +29,10 @@ class Base(DeclarativeBase): ...
 class Regulation(Base):
     __tablename__ = "regulations"
     id: Mapped[str] = mapped_column(primary_key=True)
-    celex_id: Mapped[str] = mapped_column(String(32))
-    version: Mapped[str] = mapped_column(String(32))
+    celex_id: Mapped[Optional[str]] = mapped_column(String(32))
+    version: Mapped[Optional[str]] = mapped_column(String(32))
+    last_updated: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    effective_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
 
 class Rule(Base):
@@ -38,6 +43,16 @@ class Rule(Base):
     title: Mapped[Optional[str]] = mapped_column(Text)
     content: Mapped[str] = mapped_column(Text)
     order_index: Mapped[Optional[int]] = mapped_column(nullable=True)
+    last_modified: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    effective_date: Mapped[Optional[datetime]] = mapped_column(nullable=True)
+
+
+class RegSourceLog(Base):
+    __tablename__ = "reg_source_log"
+    id: Mapped[str] = mapped_column(primary_key=True)
+    regulation_id: Mapped[str] = mapped_column(ForeignKey("regulations.id"))
+    source_name: Mapped[Optional[str]] = mapped_column(String(64))
+    created_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
 
 @lru_cache(maxsize=1)
@@ -70,16 +85,118 @@ def _annex_key_from_section_code(sc: str) -> Optional[str]:
     return None
 
 
-def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[str, str]:
-    reg_id = ses.execute(
-        select(Regulation.id).where(Regulation.celex_id == celex_id)
-    ).scalar_one_or_none()
-    if reg_id is None:
-        raise ValueError(f"CELEX {celex_id} not found in database")
+def get_latest_regulation_id_with_annex(ses: Session) -> str:
+    """Return regulation_id of the freshest Annex IV snapshot available."""
+    regs = (
+        ses.execute(
+            select(Rule.regulation_id)
+            .where(Rule.section_code.like("AnnexIV%"))
+            .group_by(Rule.regulation_id)
+        )
+        .scalars()
+        .all()
+    )
+    if not regs:
+        raise ValueError("No AnnexIV rules found in DB")
+
+    candidates: List[Tuple[str, Dict]] = []
+    for rid in regs:
+        try:
+            max_rule_ts = ses.execute(
+                select(func.max(Rule.last_modified)).where(Rule.regulation_id == rid)
+            ).scalar()
+        except Exception:
+            max_rule_ts = None
+
+        try:
+            max_rule_eff = ses.execute(
+                select(func.max(Rule.effective_date)).where(Rule.regulation_id == rid)
+            ).scalar()
+        except Exception:
+            max_rule_eff = None
+
+        try:
+            reg = ses.execute(
+                select(Regulation.version, Regulation.last_updated, Regulation.effective_date)
+                .where(Regulation.id == rid)
+            ).one_or_none()
+            reg_version, reg_last, reg_eff = reg if reg else (None, None, None)
+        except Exception:
+            reg_version = reg_last = reg_eff = None
+
+        try:
+            src_prio = case(
+                (literal_column("source_name") == "celex_consolidated", 3),
+                else_=case(
+                    (literal_column("source_name") == "ai_act_original", 2),
+                    else_=case(
+                        (literal_column("source_name") == "ai_act_html", 1),
+                        else_=0,
+                    ),
+                ),
+            )
+            rsl = ses.execute(
+                select(func.max(RegSourceLog.created_at), func.max(src_prio))
+                .where(RegSourceLog.regulation_id == rid)
+            ).first()
+            rsl_last = rsl[0] if rsl else None
+            rsl_prio = rsl[1] if rsl else 0
+        except Exception:
+            rsl_last, rsl_prio = None, 0
+
+        candidates.append(
+            (
+                rid,
+                {
+                    "rsl_prio": rsl_prio or 0,
+                    "rsl_last": rsl_last,
+                    "reg_last": reg_last,
+                    "reg_eff": reg_eff,
+                    "max_rule": max_rule_ts or max_rule_eff,
+                    "reg_ver": reg_version,
+                },
+            )
+        )
+
+    def _ver_as_dt(v: Optional[str]) -> datetime:
+        if not v:
+            return datetime.min
+        s = str(v).replace(".", "").replace("-", "")
+        try:
+            return datetime.strptime(s[:8], "%Y%m%d")
+        except Exception:
+            return datetime.min
+
+    candidates.sort(
+        key=lambda x: (
+            x[1]["rsl_prio"],
+            x[1]["rsl_last"] or datetime.min,
+            x[1]["reg_last"] or datetime.min,
+            x[1]["reg_eff"] or datetime.min,
+            x[1]["max_rule"] or datetime.min,
+            _ver_as_dt(x[1]["reg_ver"]),
+        ),
+        reverse=True,
+    )
+    return candidates[0][0]
+
+
+def load_annex_iv_from_db(
+    ses: Session, regulation_id: Optional[str] = None, celex_id: Optional[str] = None
+) -> Dict[str, str]:
+    if regulation_id is None:
+        if celex_id:
+            regulation_id = ses.execute(
+                select(Regulation.id).where(Regulation.celex_id == celex_id)
+            ).scalar_one_or_none()
+            if regulation_id is None:
+                raise ValueError(f"CELEX {celex_id} not found in database")
+        else:
+            regulation_id = get_latest_regulation_id_with_annex(ses)
 
     rows = ses.execute(
         select(Rule.section_code, Rule.content, Rule.order_index)
-        .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV%"))
+        .where(Rule.regulation_id == regulation_id, Rule.section_code.like("AnnexIV%"))
         .order_by(
             Rule.order_index.asc().nulls_last(),
             func.regexp_replace(
@@ -136,21 +253,23 @@ def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[st
     return out
 
 
-def get_expected_top_counts(ses: Session, celex_id: str = "32024R1689") -> Dict[str, int]:
-    """Return expected number of top-level subpoints per section key.
-
-    Counts children of the form ``AnnexIV.N.<letter>`` in the ``rules`` table
-    and maps them to the corresponding section key (``SECTION_KEYS[N-1]``).
-    """
-    reg_id = ses.execute(
-        select(Regulation.id).where(Regulation.celex_id == celex_id)
-    ).scalar_one_or_none()
-    if not reg_id:
-        raise ValueError(f"CELEX {celex_id} not found")
+def get_expected_top_counts(
+    ses: Session, regulation_id: Optional[str] = None, celex_id: Optional[str] = None
+) -> Dict[str, int]:
+    """Return expected number of top-level subpoints per section key."""
+    if regulation_id is None:
+        if celex_id:
+            regulation_id = ses.execute(
+                select(Regulation.id).where(Regulation.celex_id == celex_id)
+            ).scalar_one_or_none()
+            if not regulation_id:
+                raise ValueError(f"CELEX {celex_id} not found")
+        else:
+            regulation_id = get_latest_regulation_id_with_annex(ses)
 
     rows = ses.execute(
         select(Rule.section_code)
-        .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV.%"))
+        .where(Rule.regulation_id == regulation_id, Rule.section_code.like("AnnexIV.%"))
     ).scalars().all()
 
     counts: dict[str, int] = defaultdict(int)
@@ -163,7 +282,19 @@ def get_expected_top_counts(ses: Session, celex_id: str = "32024R1689") -> Dict[
             counts[SECTION_KEYS[n - 1]] += 1
     return dict(counts)
 
-def get_schema_version_from_db(ses: Session, celex_id: str = "32024R1689") -> Optional[str]:
+
+def get_schema_version_from_db(
+    ses: Session, regulation_id: Optional[str] = None, celex_id: Optional[str] = None
+) -> Optional[str]:
+    if regulation_id is None:
+        if celex_id:
+            regulation_id = ses.execute(
+                select(Regulation.id).where(Regulation.celex_id == celex_id)
+            ).scalar_one_or_none()
+            if regulation_id is None:
+                return None
+        else:
+            regulation_id = get_latest_regulation_id_with_annex(ses)
     return ses.execute(
-        select(Regulation.version).where(Regulation.celex_id == celex_id)
+        select(Regulation.version).where(Regulation.id == regulation_id)
     ).scalar_one_or_none()

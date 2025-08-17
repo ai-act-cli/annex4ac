@@ -32,7 +32,7 @@ annex4ac fetch-schema annex_template.yaml
 
 | `--source-preference` | Behaviour |
 | --------------------- | ---------- |
-| `db_only`             | Use DB only; exit code 2 if unreachable or CELEX missing |
+| `db_only`             | Use DB only; exit code 2 if unreachable or regulation missing |
 | `web_only`            | Ignore DB and fetch from the official website |
 | `db_then_web` (default) | Try DB first, fall back to web on error |
 
