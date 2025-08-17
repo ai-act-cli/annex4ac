@@ -946,12 +946,15 @@ def _write_sarif(violations, sarif_path, yaml_path):
                         "level": "error",
                         "ruleId": v["rule"],
                         "message": {"text": v["msg"]},
-                        **({"help": {"text": v["help"]}} if v.get("help") else {}),
+                        **({"properties": {"help": v["help"]}} if v.get("help") else {}),
                         "locations": [
                             {
                                 "physicalLocation": {
                                     "artifactLocation": {"uri": yaml_path or "annex.yaml"},
-                                    "region": {"startLine": key_lines.get(v["rule"], (1,1))[0], "startColumn": key_lines.get(v["rule"], (1,1))[1]}
+                                    "region": {
+                                        "startLine": key_lines.get(v["rule"], (1,1))[0],
+                                        "startColumn": key_lines.get(v["rule"], (1,1))[1]
+                                    }
                                 }
                             }
                         ]

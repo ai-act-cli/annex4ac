@@ -259,4 +259,4 @@ def test_validate_db_explain_missing_letters(monkeypatch, tmp_path):
     assert result.exit_code == 1
     assert "Missing: (b)" in result.output
     data = json.loads(sarif.read_text())
-    assert data["runs"][0]["results"][0]["help"]["text"] == "Missing subpoints: (b)"
+    assert data["runs"][0]["results"][0]["properties"]["help"] == "Missing subpoints: (b)"
