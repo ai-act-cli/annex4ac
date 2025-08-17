@@ -117,9 +117,9 @@ except ImportError:
     PIKEPDF_AVAILABLE = False
 
 # Regular expressions for parsing lists
-BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
+BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\u00B7\u2013\u2014\-\*])\s+')
 SUBPOINT_RE = re.compile(r'^\s*\(([a-h])\)\s+', re.I)  # (a)...(h); avoids roman (i)
-TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*•]|\d+[\.)])\s+')
+TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*\u2022\u25AA\u00B7\u2013\u2014]|\d+[\.)])\s+')
 ROMAN_RE = re.compile(r'^\s*\(([ivxlcdm]+)\)\s+', re.I)
 
 
@@ -157,7 +157,8 @@ def _count_subpoints_db(db_text: str) -> tuple[int, int]:
             while j < len(lines):
                 ln = lines[j]
                 if ln.strip() == "":
-                    break
+                    j += 1
+                    continue
                 indent = len(re.match(r"^\s*", ln).group(0))
                 if TOP_BULLET_RE.match(ln) and indent <= indent_top:
                     break
@@ -197,7 +198,8 @@ def _count_subpoints_user(user_text: str) -> tuple[int, int]:
         while j < len(lines):
             ln = lines[j]
             if ln.strip() == "":
-                break
+                j += 1
+                continue
             indent = len(re.match(r"^\s*", ln).group(0))
             if TOP_BULLET_RE.match(ln) and indent <= indent_top:
                 break
