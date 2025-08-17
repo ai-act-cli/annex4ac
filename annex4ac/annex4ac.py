@@ -138,6 +138,16 @@ def _normalize_lines(text: str) -> list[str]:
     return [ln.rstrip() for ln in text.splitlines()]
 
 
+def _extract_letters(text: str) -> list[str]:
+    """Extract lettered subpoints like (a), (b) from text."""
+    letters = []
+    for ln in _normalize_lines(text):
+        m = SUBPOINT_RE.match(ln)
+        if m and not ROMAN_RE.match(ln):
+            letters.append(m.group(1).lower())
+    return letters
+
+
 def _count_subpoints_db(db_text: str) -> tuple[int, int]:
     """Return (N_top, N_sub_of_first) for canonical Annex IV text from DB."""
     lines = _normalize_lines(db_text)
@@ -936,6 +946,7 @@ def _write_sarif(violations, sarif_path, yaml_path):
                         "level": "error",
                         "ruleId": v["rule"],
                         "message": {"text": v["msg"]},
+                        **({"help": {"text": v["help"]}} if v.get("help") else {}),
                         "locations": [
                             {
                                 "physicalLocation": {
@@ -1101,6 +1112,7 @@ def validate(
     use_db: bool = typer.Option(False, help="Cross-check sections against DB"),
     db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
     celex_id: str = typer.Option("32024R1689", help="CELEX id"),
+    explain: bool = typer.Option(False, help="Show which subpoints are missing when using --use-db"),
 ):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     if stale_after == 0:
@@ -1143,11 +1155,22 @@ def validate(
                 exp_top = exp_top_counts.get(key, 0)
                 exp_sub = _count_subpoints_db(db_text)[1]
                 got_top, got_sub = _count_subpoints_user(user_text)
+                expected_letters = _extract_letters(db_text)
+                user_letters = _extract_letters(user_text)
+                missing_letters = sorted(set(expected_letters) - set(user_letters))
                 if exp_top >= 2 and got_top < exp_top:
-                    violations.append({
+                    msg = f"{key}: expected ≥{exp_top} top-level subpoints, got {got_top}."
+                    if explain and missing_letters:
+                        msg += " Missing: " + ", ".join(f"({l})" for l in missing_letters) + "."
+                    violation = {
                         "rule": f"{key}_subpoints_insufficient",
-                        "msg": f"{key}: expected ≥{exp_top} top-level subpoints, got {got_top}.",
-                    })
+                        "msg": msg,
+                    }
+                    if missing_letters:
+                        violation["help"] = "Missing subpoints: " + ", ".join(
+                            f"({l})" for l in missing_letters
+                        )
+                    violations.append(violation)
                 if exp_sub >= 2 and got_sub < exp_sub:
                     violations.append({
                         "rule": f"{key}_subsub_insufficient",

@@ -9,7 +9,7 @@ SCHEMA_VERSION = "20240726"
 AI_ACT_ANNEX_IV_HTML = "https://artificialintelligenceact.eu/annex/4/"
 # Fallback – Official Journal PDF (for archival integrity)
 AI_ACT_ANNEX_IV_PDF = (
-    "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=OJ%3AL_202401689"
+    "https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32024R1689"
 )
 
 # Document control fields (common metadata)

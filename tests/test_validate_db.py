@@ -212,3 +212,48 @@ def test_validate_db_roman_subsub(monkeypatch, tmp_path):
 
     assert result.exit_code == 1
     assert "system_overview_subsub_insufficient" in result.output
+
+
+def test_validate_db_explain_missing_letters(monkeypatch, tmp_path):
+    runner = CliRunner()
+
+    class DummySession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr("annex4ac.annex4ac.get_session", lambda url: DummySession())
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.load_annex_iv_from_db",
+        lambda s, celex_id: {"system_overview": "(a) foo\n(b) bar"},
+    )
+    monkeypatch.setattr("annex4ac.annex4ac._validate_payload", lambda p: ([], []))
+    monkeypatch.setattr(
+        "annex4ac.annex4ac.get_expected_top_counts",
+        lambda s, celex_id: {"system_overview": 2},
+    )
+
+    yml = tmp_path / "in.yaml"
+    yml.write_text("system_overview: '(a) foo'\n")
+    sarif = tmp_path / "out.sarif"
+
+    result = runner.invoke(
+        app,
+        [
+            "validate",
+            str(yml),
+            "--use-db",
+            "--db-url",
+            "postgresql+psycopg://u:p@h/db",
+            "--explain",
+            "--sarif",
+            str(sarif),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Missing: (b)" in result.output
+    data = json.loads(sarif.read_text())
+    assert data["runs"][0]["results"][0]["help"]["text"] == "Missing subpoints: (b)"
