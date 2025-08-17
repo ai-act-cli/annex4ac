@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 import json
-import os
 from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup

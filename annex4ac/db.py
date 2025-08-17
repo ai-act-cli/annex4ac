@@ -15,10 +15,8 @@ from sqlalchemy import (
     ForeignKey,
     func,
     case,
-    literal_column,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
-from sqlalchemy.sql import nulls_last
 
 from .constants import SECTION_MAPPING, SECTION_KEYS
 
@@ -126,19 +124,23 @@ def get_latest_regulation_id_with_annex(ses: Session) -> str:
 
         try:
             src_prio = case(
-                (literal_column("source_name") == "celex_consolidated", 3),
+                (RegSourceLog.source_name == "celex_consolidated", 3),
                 else_=case(
-                    (literal_column("source_name") == "ai_act_original", 2),
+                    (RegSourceLog.source_name == "ai_act_original", 2),
                     else_=case(
-                        (literal_column("source_name") == "ai_act_html", 1),
+                        (RegSourceLog.source_name == "ai_act_html", 1),
                         else_=0,
                     ),
                 ),
             )
-            rsl = ses.execute(
-                select(func.max(RegSourceLog.created_at), func.max(src_prio))
-                .where(RegSourceLog.regulation_id == rid)
-            ).first()
+            rsl = (
+                ses.execute(
+                    select(
+                        func.max(RegSourceLog.created_at),
+                        func.max(src_prio),
+                    ).where(RegSourceLog.regulation_id == rid)
+                ).first()
+            )
             rsl_last = rsl[0] if rsl else None
             rsl_prio = rsl[1] if rsl else 0
         except Exception:
