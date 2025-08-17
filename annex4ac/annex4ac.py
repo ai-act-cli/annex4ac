@@ -61,6 +61,7 @@ from platformdirs import user_cache_dir
 from .constants import DOC_CTRL_FIELDS, SECTION_MAPPING, SCHEMA_VERSION, AI_ACT_ANNEX_IV_HTML, AI_ACT_ANNEX_IV_PDF
 from .config import Settings
 from .db import get_session, load_annex_iv_from_db, get_schema_version_from_db
+from .tags import fetch_annex3_tags
 
 
 
@@ -886,38 +887,6 @@ def _check_license():
         typer.secho(f"License plan '{plan}' insufficient for PDF generation", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-def fetch_annex3_tags(cache_path=None, cache_days=14):
-    """Return a set of Annex III high-risk tags with caching and fallback."""
-    cache_dir = (
-        os.path.dirname(cache_path)
-        if cache_path
-        else user_cache_dir("annex4ac")
-    )
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_file = cache_path or os.path.join(cache_dir, "high_risk_tags.json")
-
-    if os.path.exists(cache_file):
-        mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
-        if datetime.now() - mtime < timedelta(days=cache_days):
-            with open(cache_file, "r", encoding="utf-8") as f:
-                return set(json.load(f))
-
-    try:
-        html = _fetch_html("https://artificialintelligenceact.eu/annex/3/")
-        soup = BeautifulSoup(html, "html.parser")
-        tags = sorted({slugify(li.text) for li in soup.select("ol > li")})
-        with open(cache_file, "w", encoding="utf-8") as f:
-            json.dump(tags, f, ensure_ascii=False, indent=2)
-        return set(tags)
-    except Exception:
-        data = (
-            files("annex4ac")
-            .joinpath("resources/high_risk_tags.default.json")
-            .read_text(encoding="utf-8")
-        )
-        return set(json.loads(data))
-
-
 @app.command()
 def update_annex3_cache():
     """Force-update cached Annex III high-risk tags."""
@@ -940,11 +909,8 @@ def fetch_schema(
     source_preference: str = typer.Option(None, help="db_only|web_only|db_then_web"),
 ):
     """Download the latest Annex IV text and convert to YAML scaffold."""
-    import datetime
     import requests
-    from pathlib import Path as SysPath
     from shutil import copyfile
-    import yaml as pyyaml
 
     settings = Settings()
     db_url = db_url or settings.db_url

@@ -12,7 +12,7 @@ import yaml
 from importlib.resources import files
 
 try:
-    from annex4ac import fetch_annex3_tags
+    from annex4ac.tags import fetch_annex3_tags
     HIGH_RISK_TAGS = fetch_annex3_tags()
 except Exception:
     data = (
