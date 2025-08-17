@@ -35,6 +35,7 @@ import tempfile
 import re
 from pathlib import Path
 from typing import Dict, Literal, List, Optional
+from enum import Enum
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 from dateutil.parser import parse as parse_dt
@@ -63,6 +64,11 @@ from .config import Settings
 from .db import get_session, load_annex_iv_from_db, get_schema_version_from_db
 from .tags import fetch_annex3_tags
 
+
+class SourcePref(str, Enum):
+    db_only = "db_only"
+    web_only = "web_only"
+    db_then_web = "db_then_web"
 
 
 def _parse_iso_date(val):
@@ -908,7 +914,9 @@ def fetch_schema(
     offline: bool = typer.Option(False, help="Use offline cache if available"),
     db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
     celex_id: str = typer.Option("32024R1689", help="CELEX id"),
-    source_preference: str = typer.Option(None, help="db_only|web_only|db_then_web"),
+    source_preference: Optional[SourcePref] = typer.Option(
+        None, help="db_only|web_only|db_then_web"
+    ),
 ):
     """Download the latest Annex IV text and convert to YAML scaffold."""
     import requests
@@ -917,7 +925,7 @@ def fetch_schema(
     settings = Settings()
     db_url = db_url or settings.db_url
     celex_id = celex_id or settings.celex_id
-    source_preference = source_preference or settings.source_preference
+    source_preference = (source_preference.value if source_preference else settings.source_preference)
 
     cache_dir = user_cache_dir("annex4ac")
     os.makedirs(cache_dir, exist_ok=True)
@@ -959,6 +967,7 @@ def fetch_schema(
 
         if not data:
             r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
+            r.raise_for_status()
             html = r.text
             data = _parse_annex_iv(html)
             source_used = "WEB"

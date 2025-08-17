@@ -6,7 +6,6 @@ import requests
 from bs4 import BeautifulSoup
 from importlib.resources import files
 from platformdirs import user_cache_dir
-import typer
 
 
 def slugify(text: str) -> str:
@@ -31,8 +30,7 @@ def slugify(text: str) -> str:
 def _fetch_html(url: str) -> str:
     r = requests.get(url, timeout=20)
     if r.status_code != 200:
-        typer.secho(f"ERROR: {url} returned {r.status_code}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+        raise requests.HTTPError(f"{url} -> HTTP {r.status_code}")
     return r.text
 
 
