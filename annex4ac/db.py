@@ -2,7 +2,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from contextlib import contextmanager
-from typing import Dict, Iterator, Optional
+from typing import Dict, Iterator, Optional, List, Tuple
 
 from sqlalchemy import (
     Integer,
@@ -55,6 +55,9 @@ def get_session(db_url: str) -> Iterator[Session]:
 
 
 _ANNEX_RE = re.compile(r"^AnnexIV\.(\d+)", re.I)
+_SUBPOINT_RE = re.compile(r"\([a-z]\)", re.I)
+_SUBPOINT_LINE_RE = re.compile(r"^\s*\(([a-z])\)\s+", re.I)
+_CHILD_CODE_RE = re.compile(r"^AnnexIV\.\d+\.([a-z])", re.I)
 
 
 def _annex_key_from_section_code(sc: str) -> Optional[str]:
@@ -75,28 +78,62 @@ def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[st
         raise ValueError(f"CELEX {celex_id} not found in database")
 
     rows = ses.execute(
-        select(Rule.section_code, Rule.content)
+        select(Rule.section_code, Rule.content, Rule.order_index)
         .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV%"))
         .order_by(
             nulls_last(Rule.order_index.asc()),
             func.regexp_replace(
-                Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1"
+                Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1",
             ).cast(Integer),
             Rule.section_code.asc(),
         )
     ).all()
 
-    buckets: dict[str, list[str]] = defaultdict(list)
-    for sc, content in rows:
+    buckets: dict[str, List[Tuple[str, str, Optional[int]]]] = defaultdict(list)
+    for sc, content, idx in rows:
         key = _annex_key_from_section_code(sc)
         if key:
-            buckets[key].append((content or "").strip())
+            buckets[key].append((sc, (content or "").strip(), idx))
 
     out: Dict[str, str] = {}
-    for _, key in SECTION_MAPPING:
-        out[key] = "\n\n".join([x for x in buckets.get(key, []) if x])
-    return out
+    for i, (_, key) in enumerate(SECTION_MAPPING, start=1):
+        parts = buckets.get(key, [])
+        if not parts:
+            out[key] = ""
+            continue
 
+        parent_code = f"AnnexIV.{i}"
+        parent_text = None
+        children: List[Tuple[str, str, Optional[int]]] = []
+        for sc, content, idx in parts:
+            if sc.lower() == parent_code.lower():
+                parent_text = content
+            else:
+                children.append((sc, content, idx))
+
+        if parent_text and _SUBPOINT_RE.search(parent_text):
+            out[key] = parent_text.strip()
+            continue
+
+        lines: List[str] = []
+        if parent_text and parent_text.strip():
+            lines.append(parent_text.strip())
+
+        def _child_sort(t: Tuple[str, str, Optional[int]]):
+            sc, _c, idx = t
+            m = _CHILD_CODE_RE.match(sc)
+            letter = m.group(1) if m else ""
+            return (idx is None, idx if idx is not None else 0, letter)
+
+        for sc, content, idx in sorted(children, key=_child_sort):
+            m = _CHILD_CODE_RE.match(sc)
+            letter = m.group(1) if m else ""
+            clean = _SUBPOINT_LINE_RE.sub("", content).strip()
+            prefix = f"({letter}) " if letter else ""
+            lines.append(f"{prefix}{clean}")
+
+        out[key] = "\n\n".join([ln for ln in lines if ln])
+    return out
 
 def get_schema_version_from_db(ses: Session, celex_id: str = "32024R1689") -> Optional[str]:
     return ses.execute(
