@@ -2,6 +2,7 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 from contextlib import contextmanager
+from functools import lru_cache
 from typing import Dict, Iterator, Optional, List, Tuple
 
 from sqlalchemy import (
@@ -39,19 +40,18 @@ class Rule(Base):
     order_index: Mapped[Optional[int]] = mapped_column(nullable=True)
 
 
+@lru_cache(maxsize=1)
+def _engine(db_url: str):
+    """Cached Engine factory to avoid reconnecting on every call."""
+    return create_engine(db_url, pool_pre_ping=True)
+
+
 @contextmanager
 def get_session(db_url: str) -> Iterator[Session]:
-    """Context manager yielding a short-lived SQLAlchemy session.
-
-    A fresh Engine is created for each invocation and disposed on exit to avoid
-    lingering connections in long-running processes.
-    """
-    engine = create_engine(db_url, pool_pre_ping=True)
-    try:
-        with Session(engine) as ses:
-            yield ses
-    finally:
-        engine.dispose()
+    """Yield a short-lived SQLAlchemy session bound to a cached Engine."""
+    eng = _engine(db_url)
+    with Session(eng) as ses:
+        yield ses
 
 
 _ANNEX_RE = re.compile(r"^AnnexIV\.(\d+)", re.I)
@@ -81,7 +81,7 @@ def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[st
         select(Rule.section_code, Rule.content, Rule.order_index)
         .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV%"))
         .order_by(
-            nulls_last(Rule.order_index.asc()),
+            Rule.order_index.asc().nulls_last(),
             func.regexp_replace(
                 Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1",
             ).cast(Integer),

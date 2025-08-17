@@ -1021,7 +1021,7 @@ def validate(
                         letters.append(m.group(1).lower())
                 return letters
 
-            for idx, (_, key) in enumerate(SECTION_MAPPING, start=1):
+            for _, key in SECTION_MAPPING:
                 db_text = db_schema.get(key)
                 user_text = str(payload.get(key) or "").strip()
                 if not db_text:
@@ -1032,13 +1032,12 @@ def validate(
                         "msg": f"Annex IV requires content for '{key}' (per current DB snapshot).",
                     })
                     continue
-                if idx in (1, 2):
-                    for letter in _extract_subpoints(db_text):
-                        if not re.search(rf"\({letter}\)", user_text, re.I):
-                            violations.append({
-                                "rule": f"{key}_{letter}_required",
-                                "msg": f"Section '{key}' requires subpoint ({letter}) (per current DB snapshot).",
-                            })
+                for letter in _extract_subpoints(db_text):
+                    if not re.search(rf"\({letter}\)", user_text, re.I):
+                        violations.append({
+                            "rule": f"{key}_{letter}_required",
+                            "msg": f"Section '{key}' requires subpoint ({letter}) (per current DB snapshot).",
+                        })
 
         if sarif and violations:
             _write_sarif(violations, sarif, str(input))

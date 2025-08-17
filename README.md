@@ -28,12 +28,15 @@ annex4ac fetch-schema annex_template.yaml
 # annex4ac fetch-schema --db-url "$ANNEX4AC_DB_URL" --source-preference db_only annex_template.yaml  # fail if DB missing
 # (Database mode is currently tested only with PostgreSQL.)
 
+```
+
 | `--source-preference` | Behaviour |
 | --------------------- | ---------- |
 | `db_only`             | Use DB only; exit code 2 if unreachable or CELEX missing |
 | `web_only`            | Ignore DB and fetch from the official website |
 | `db_then_web` (default) | Try DB first, fall back to web on error |
 
+```bash
 # 3 Fill in the YAML → validate
 cp annex_template.yaml my_annex.yaml
 $EDITOR my_annex.yaml
