@@ -892,26 +892,48 @@ def _check_license():
         typer.secho(f"License plan '{plan}' insufficient for PDF generation", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-def fetch_annex3_tags(cache_path="high_risk_tags.json", cache_days=14):
-    """
-    Parses Annex III, caches the result in high_risk_tags.json (next to annex4ac.py),
-    returns a set of tags.
-    """
-    cache_file = os.path.join(os.path.dirname(__file__), cache_path)
+def fetch_annex3_tags(cache_path=None, cache_days=14):
+    """Return a set of Annex III high-risk tags with caching and fallback."""
+    cache_dir = (
+        os.path.dirname(cache_path)
+        if cache_path
+        else user_cache_dir("annex4ac")
+    )
+    os.makedirs(cache_dir, exist_ok=True)
+    cache_file = cache_path or os.path.join(cache_dir, "high_risk_tags.json")
+
     if os.path.exists(cache_file):
         mtime = datetime.fromtimestamp(os.path.getmtime(cache_file))
         if datetime.now() - mtime < timedelta(days=cache_days):
             with open(cache_file, "r", encoding="utf-8") as f:
                 return set(json.load(f))
-    html = _fetch_html("https://artificialintelligenceact.eu/annex/3/")
-    soup = BeautifulSoup(html, "html.parser")
-    tags = {slugify(li.text) for li in soup.select("ol > li")}
-    with open(cache_file, "w", encoding="utf-8") as f:
-        json.dump(sorted(tags), f, ensure_ascii=False, indent=2)
-    return tags
 
-def update_high_risk_tags_json():
-    fetch_annex3_tags()
+    try:
+        html = _fetch_html("https://artificialintelligenceact.eu/annex/3/")
+        soup = BeautifulSoup(html, "html.parser")
+        tags = sorted({slugify(li.text) for li in soup.select("ol > li")})
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(tags, f, ensure_ascii=False, indent=2)
+        return set(tags)
+    except Exception:
+        from importlib.resources import files
+
+        data = (
+            files("annex4ac.resources")
+            .joinpath("high_risk_tags.default.json")
+            .read_text(encoding="utf-8")
+        )
+        return set(json.loads(data))
+
+
+@app.command()
+def update_annex3_cache():
+    """Force-update cached Annex III high-risk tags."""
+    tags = fetch_annex3_tags(cache_days=0)
+    typer.secho(
+        f"Annex III tags updated: {len(tags)} entries",
+        fg=typer.colors.GREEN,
+    )
 
 # -----------------------------------------------------------------------------
 # CLI Commands

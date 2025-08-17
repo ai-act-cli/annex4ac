@@ -43,4 +43,4 @@ addopts = "-q"
 include = ["annex4ac", "annex4ac.policy"]
 
 [tool.setuptools.package-data]
-annex4ac = ["resources/*.icc", "fonts/*.ttf", "templates/*.html"]
+annex4ac = ["resources/*.icc", "resources/*.json", "fonts/*.ttf", "templates/*.html"]

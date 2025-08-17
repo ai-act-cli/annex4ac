@@ -205,7 +205,7 @@ Found 3 total issue(s): 2 errors, 1 warnings
 
 ## 🏷️ High-risk tags (Annex III)
 
-The list of high-risk tags (Annex III) is now loaded dynamically from the official website. If the network is unavailable, a cache or fallback list is used. This affects the auto_high_risk logic in validation.
+The list of high-risk tags (Annex III) is now loaded dynamically from the official website. If the network is unavailable, a cache or packaged fallback list is used. To refresh the local cache manually, run `annex4ac update-annex3-cache`. This affects the auto_high_risk logic in validation.
 
 ---
 
