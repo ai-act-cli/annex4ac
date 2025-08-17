@@ -35,6 +35,8 @@ annex4ac validate my_annex.yaml   # "Validation OK!" or exit 1
 # Optional: Check if document is stale (heuristic, not legal requirement)
 annex4ac validate my_annex.yaml --stale-after 30  # Warn if older than 30 days
 annex4ac validate my_annex.yaml --stale-after 180 --strict-age  # Fail CI if older than 180 days
+# Cross-check sections against the database and emit SARIF for GitHub
+annex4ac validate my_annex.yaml --use-db --db-url "$ANNEX4AC_DB_URL" --sarif out.sarif
 
 # 4 Generate output (PDF requires license)
 # HTML (free) - automatically validates before generation

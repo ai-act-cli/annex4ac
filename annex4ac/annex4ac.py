@@ -44,7 +44,7 @@ from bs4 import BeautifulSoup
 import yaml
 import typer
 from pydantic import BaseModel, ValidationError, Field, field_validator
-import importlib.resources as pkgres
+from importlib.resources import files
 from jinja2 import Template
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem, KeepTogether
 from reportlab.lib.pagesizes import A4
@@ -232,10 +232,8 @@ def listify(text: str) -> Markup:
 # -----------------------------------------------------------------------------
 # Register Liberation Sans (expects LiberationSans-Regular.ttf and LiberationSans-Bold.ttf to be available)
 try:
-    import importlib.resources as pkg_resources
-    # Try to use importlib.resources for proper package access
-    regular_font_path = pkg_resources.files("annex4ac.fonts").joinpath("LiberationSans-Regular.ttf")
-    bold_font_path = pkg_resources.files("annex4ac.fonts").joinpath("LiberationSans-Bold.ttf")
+    regular_font_path = files("annex4ac").joinpath("fonts/LiberationSans-Regular.ttf")
+    bold_font_path = files("annex4ac").joinpath("fonts/LiberationSans-Bold.ttf")
     pdfmetrics.registerFont(TTFont("LiberationSans", str(regular_font_path)))
     pdfmetrics.registerFont(TTFont("LiberationSans-Bold", str(bold_font_path)))
 except Exception:
@@ -634,19 +632,16 @@ def _to_pdfa(path: Path):
     typer.secho("Converting to PDF/A-2b...", fg=typer.colors.BLUE)
     
     try:
-        # Load ICC profile using importlib.resources for proper package access
-        try:
-            import importlib.resources as pkg_resources
-            icc_bytes = pkg_resources.files("annex4ac.resources").joinpath("sRGB.icc").read_bytes()
-            typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
-        except Exception as e:
-            # Fallback to direct file access
-            icc_path = Path(__file__).parent / "resources" / "sRGB.icc"
-            if not icc_path.exists():
-                typer.secho(f"  ICC profile not found: {icc_path}", fg=typer.colors.RED)
-                return
-            icc_bytes = icc_path.read_bytes()
-            typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+        icc_bytes = files("annex4ac").joinpath("resources/sRGB.icc").read_bytes()
+        typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
+    except Exception:
+        # Fallback to direct file access
+        icc_path = Path(__file__).parent / "resources" / "sRGB.icc"
+        if not icc_path.exists():
+            typer.secho(f"  ICC profile not found: {icc_path}", fg=typer.colors.RED)
+            return
+        icc_bytes = icc_path.read_bytes()
+        typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
         
         with pikepdf.open(str(path), allow_overwriting_input=True) as pdf:
             typer.secho(f"  Opened PDF: {len(pdf.pages)} pages", fg=typer.colors.BLUE)
@@ -690,11 +685,10 @@ def _to_pdfa(path: Path):
 
 def _default_tpl() -> str:
     try:
-        import importlib.resources as pkg_resources
-        return pkg_resources.files("annex4ac.templates").joinpath("template.html").read_text(encoding='utf-8')
+        return files("annex4ac").joinpath("templates/template.html").read_text(encoding="utf-8")
     except Exception:
         # Fallback to direct file access
-        return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding='utf-8')
+        return Path(__file__).parent.joinpath("templates", "template.html").read_text(encoding="utf-8")
 
 def _render_html(data: dict, meta: dict) -> str:
     """Render HTML from template with data."""
@@ -765,7 +759,7 @@ def _check_freshness(dt, max_days=None, strict=False):
         else:
             typer.secho(f"[WARNING] {msg}", fg=typer.colors.YELLOW)
 
-def _validate_payload(payload, sarif_path=None, yaml_path=None):
+def _validate_payload(payload):
     """Offline validation via pure Python rule engine.
 
     Returns a list of violations; caller handles SARIF emission so additional
@@ -845,7 +839,6 @@ def _write_sarif(violations, sarif_path, yaml_path):
 # JWT license check (Pro)
 def _check_license():
     import os, time, typer, jwt
-    from importlib.resources import files
 
     token = os.getenv("ANNEX4AC_LICENSE")
     if not token:
@@ -858,7 +851,7 @@ def _check_license():
 
     # 2) Public key dictionary (ready for rotation)
     pub_map = {
-        "2025-01": files(__package__).joinpath("lic_pub.pem").read_text()
+        "2025-01": files("annex4ac").joinpath("lic_pub.pem").read_text()
     }
 
     key = pub_map.get(kid)
@@ -916,11 +909,9 @@ def fetch_annex3_tags(cache_path=None, cache_days=14):
             json.dump(tags, f, ensure_ascii=False, indent=2)
         return set(tags)
     except Exception:
-        from importlib.resources import files
-
         data = (
-            files("annex4ac.resources")
-            .joinpath("high_risk_tags.default.json")
+            files("annex4ac")
+            .joinpath("resources/high_risk_tags.default.json")
             .read_text(encoding="utf-8")
         )
         return set(json.loads(data))
@@ -1036,7 +1027,7 @@ def validate(
         with input.open("r", encoding="utf-8") as f:
             payload = yaml_ruamel.load(f)
 
-        violations = _validate_payload(payload, sarif_path=sarif, yaml_path=str(input))
+        violations = _validate_payload(payload)
 
         if use_db and db_url:
             with get_session(db_url) as ses:
@@ -1075,7 +1066,7 @@ def generate(
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
 
     if not skip_validation:
-        violations = _validate_payload(payload, yaml_path=str(input))
+        violations = _validate_payload(payload)
         if violations:
             for v in violations:
                 typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)

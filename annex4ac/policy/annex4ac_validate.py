@@ -16,8 +16,8 @@ try:
     HIGH_RISK_TAGS = fetch_annex3_tags()
 except Exception:
     data = (
-        files("annex4ac.resources")
-        .joinpath("high_risk_tags.default.json")
+        files("annex4ac")
+        .joinpath("resources/high_risk_tags.default.json")
         .read_text(encoding="utf-8")
     )
     HIGH_RISK_TAGS = set(json.loads(data))
