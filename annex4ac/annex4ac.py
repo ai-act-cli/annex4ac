@@ -643,10 +643,11 @@ def _to_pdfa(path: Path):
             return
         icc_bytes = icc_path.read_bytes()
         typer.secho(f"  Loaded ICC profile: {len(icc_bytes)} bytes", fg=typer.colors.BLUE)
-        
+
+    try:
         with pikepdf.open(str(path), allow_overwriting_input=True) as pdf:
             typer.secho(f"  Opened PDF: {len(pdf.pages)} pages", fg=typer.colors.BLUE)
-            
+
             # Add XMP metadata for PDF/A
             with pdf.open_metadata() as meta:
                 meta['pdfaid:part'] = "2"
@@ -655,30 +656,31 @@ def _to_pdfa(path: Path):
                 meta['dc:subject'] = 'EU AI Act Compliance'
                 meta['dc:creator'] = ['Annex4AC']
             typer.secho(f"  Added XMP metadata: pdfaid:part=2, pdfaid:conformance=B", fg=typer.colors.BLUE)
-            
+
             # Add basic document info
             pdf.docinfo['/Title'] = 'Annex IV Technical Documentation'
             pdf.docinfo['/Subject'] = 'EU AI Act Compliance'
             pdf.docinfo['/Creator'] = 'Annex4AC'
             typer.secho(f"  Added document info: Title, Subject, Creator", fg=typer.colors.BLUE)
-            
+
             # Embed OutputIntent with ICC profile
             _embed_output_intent(pdf, icc_bytes)
-            
+
             # Save with PDF/A-2b compliance using new pikepdf 9+ approach
             typer.secho(f"  Saving with PDF/A-2b compliance...", fg=typer.colors.BLUE)
-            pdf.save(str(path),
-                     preserve_pdfa=True,          # don't break PDF/A compliance
-                     fix_metadata_version=True,   # fix PDFVersion in XMP if present
-                     deterministic_id=True        # reproducible /ID for same input
-            )       
-        
+            pdf.save(
+                str(path),
+                preserve_pdfa=True,  # don't break PDF/A compliance
+                fix_metadata_version=True,  # fix PDFVersion in XMP if present
+                deterministic_id=True,  # reproducible /ID for same input
+            )
+
         # Check result
         file_size = path.stat().st_size
         typer.secho(f"  File size after conversion: {file_size:,} bytes", fg=typer.colors.BLUE)
-        
+
         typer.secho(f"PDF/A-2b conversion completed: {path}", fg=typer.colors.GREEN)
-        
+
     except Exception as e:
         typer.secho(f"PDF/A conversion failed: {e}", fg=typer.colors.RED)
         import traceback
