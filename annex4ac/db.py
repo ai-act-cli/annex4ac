@@ -1,9 +1,21 @@
 from __future__ import annotations
 import re
 from collections import defaultdict
-from typing import Dict, Optional
-from sqlalchemy import create_engine, select, String, Text, ForeignKey
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
+from contextlib import contextmanager
+from typing import Dict, Iterator, Optional
+
+from sqlalchemy import (
+    Integer,
+    create_engine,
+    select,
+    String,
+    Text,
+    ForeignKey,
+    func,
+)
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.sql import nulls_last
+
 from .constants import SECTION_MAPPING, SECTION_KEYS
 
 
@@ -27,14 +39,19 @@ class Rule(Base):
     order_index: Mapped[Optional[int]] = mapped_column(nullable=True)
 
 
-def get_session(db_url: str) -> Session:
-    """Return a short-lived SQLAlchemy session for CLI commands.
+@contextmanager
+def get_session(db_url: str) -> Iterator[Session]:
+    """Context manager yielding a short-lived SQLAlchemy session.
 
-    We intentionally avoid a global ``sessionmaker`` factory; each CLI invocation
-    acquires its own connection from the engine's pool and disposes it promptly.
+    A fresh Engine is created for each invocation and disposed on exit to avoid
+    lingering connections in long-running processes.
     """
     engine = create_engine(db_url, pool_pre_ping=True)
-    return Session(engine)
+    try:
+        with Session(engine) as ses:
+            yield ses
+    finally:
+        engine.dispose()
 
 
 _ANNEX_RE = re.compile(r"^AnnexIV\.(\d+)", re.I)
@@ -60,7 +77,13 @@ def load_annex_iv_from_db(ses: Session, celex_id: str = "32024R1689") -> Dict[st
     rows = ses.execute(
         select(Rule.section_code, Rule.content)
         .where(Rule.regulation_id == reg_id, Rule.section_code.like("AnnexIV%"))
-        .order_by(Rule.order_index.asc().nulls_last(), Rule.section_code.asc())
+        .order_by(
+            nulls_last(Rule.order_index.asc()),
+            func.regexp_replace(
+                Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1"
+            ).cast(Integer),
+            Rule.section_code.asc(),
+        )
     ).all()
 
     buckets: dict[str, list[str]] = defaultdict(list)

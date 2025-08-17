@@ -933,12 +933,14 @@ def fetch_schema(
         try_db_first = (source_preference != "web_only") and bool(db_url)
         data = None
         schema_version = None
+        source_used = "WEB"
 
         if try_db_first:
             try:
                 with get_session(db_url) as ses:
                     data = load_annex_iv_from_db(ses, celex_id=celex_id)
                     schema_version = get_schema_version_from_db(ses, celex_id=celex_id)
+                    source_used = f"DB (version {schema_version})" if schema_version else "DB"
             except Exception:
                 typer.secho(
                     "[DB] fallback to web (connection failed or CELEX not found)",
@@ -957,11 +959,13 @@ def fetch_schema(
             r = requests.get(AI_ACT_ANNEX_IV_HTML, timeout=20)
             html = r.text
             data = _parse_annex_iv(html)
+            source_used = "WEB"
 
         data["_schema_version"] = schema_version or SCHEMA_VERSION
         _write_yaml(data, output)
         with open(output, "r", encoding="utf-8") as src, open(cache_path, "w", encoding="utf-8") as dst:
             dst.write(src.read())
+        typer.secho(f"Using source: {source_used}", fg=typer.colors.BLUE)
         typer.secho(f"Schema written to {output}", fg=typer.colors.GREEN)
     except Exception as e:
         if os.path.exists(cache_path):
@@ -995,6 +999,14 @@ def validate(
             payload = yaml_ruamel.load(f)
 
         violations, _warnings = _validate_payload(payload)
+
+        if use_db and not db_url:
+            typer.secho(
+                "--use-db requires a database URL. Set ANNEX4AC_DB_URL or pass --db-url.",
+                fg=typer.colors.RED,
+                err=True,
+            )
+            raise typer.Exit(2)
 
         if use_db and db_url:
             with get_session(db_url) as ses:

@@ -265,7 +265,7 @@ If Annex IV is temporarily unavailable online, use:
 annex4ac fetch-schema --offline
 ```
 
-This loads the last saved schema from the user cache directory (e.g. `~/.cache/annex4ac` on Linux). The cache updates automatically every 14 days.
+This loads the last saved schema from the user cache directory (e.g. `~/.cache/annex4ac` on Linux). Re-run `fetch-schema` to refresh the cache.
 
 ---
 
