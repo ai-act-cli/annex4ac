@@ -119,6 +119,95 @@ except ImportError:
 # Regular expressions for parsing lists
 BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\-\*])\s+')
 SUBPOINT_RE = re.compile(r'^\s*\(([a-z])\)\s+', re.I)  # (a), (b)...
+TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*•]|\d+\.)\s+')
+ROMAN_RE = re.compile(r'^\s*\(([ivxlcdm]+)\)\s+', re.I)
+
+
+def _normalize_lines(text: str) -> list[str]:
+    if not text:
+        return []
+    text = fix_text(text)
+    text = text.replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\n')
+    return [ln.rstrip() for ln in text.splitlines()]
+
+
+def _count_subpoints_db(db_text: str) -> tuple[int, int]:
+    """Return (N_top, N_sub_of_first) for canonical Annex IV text from DB."""
+    lines = _normalize_lines(db_text)
+    letters_idx = [i for i, ln in enumerate(lines) if SUBPOINT_RE.match(ln)]
+    if letters_idx:
+        n_top = len(letters_idx)
+        start = letters_idx[0]
+        end = letters_idx[1] if len(letters_idx) > 1 else len(lines)
+        block = lines[start + 1 : end]
+    else:
+        candidates = [(i, len(re.match(r"^\s*", ln).group(0)))
+                      for i, ln in enumerate(lines) if TOP_BULLET_RE.match(ln)]
+        if candidates:
+            min_indent = min(ind for _, ind in candidates)
+            top_idxs = [i for i, ind in candidates if ind == min_indent]
+            n_top = len(top_idxs)
+        else:
+            n_top = 0
+        if n_top:
+            first_idx = top_idxs[0]
+            indent_top = min_indent
+            j = first_idx + 1
+            block = []
+            while j < len(lines):
+                ln = lines[j]
+                if ln.strip() == "":
+                    break
+                indent = len(re.match(r"^\s*", ln).group(0))
+                if TOP_BULLET_RE.match(ln) and indent <= indent_top:
+                    break
+                block.append(ln)
+                j += 1
+        else:
+            return (0, 0)
+    n_sub = 0
+    for ln in block:
+        if TOP_BULLET_RE.match(ln) or ROMAN_RE.match(ln) or SUBPOINT_RE.match(ln):
+            n_sub += 1
+    return (n_top, n_sub)
+
+
+def _count_subpoints_user(user_text: str) -> tuple[int, int]:
+    """Return (N_top, N_sub_of_first) for user-provided section text."""
+    lines = _normalize_lines(user_text)
+    letters = [i for i, ln in enumerate(lines) if SUBPOINT_RE.match(ln)]
+    if letters:
+        n_top = len(letters)
+        start = letters[0]
+        end = letters[1] if len(letters) > 1 else len(lines)
+        block = lines[start + 1 : end]
+    else:
+        candidates = [(i, len(re.match(r"^\s*", ln).group(0)))
+                      for i, ln in enumerate(lines) if TOP_BULLET_RE.match(ln)]
+        if candidates:
+            min_indent = min(ind for _, ind in candidates)
+            top_idx = [i for i, ind in candidates if ind == min_indent]
+            n_top = len(top_idx)
+        else:
+            return (0, 0)
+        start = top_idx[0]
+        indent_top = min_indent
+        j = start + 1
+        block = []
+        while j < len(lines):
+            ln = lines[j]
+            if ln.strip() == "":
+                break
+            indent = len(re.match(r"^\s*", ln).group(0))
+            if TOP_BULLET_RE.match(ln) and indent <= indent_top:
+                break
+            block.append(ln)
+            j += 1
+    n_sub = 0
+    for ln in block:
+        if TOP_BULLET_RE.match(ln) or ROMAN_RE.match(ln) or SUBPOINT_RE.match(ln):
+            n_sub += 1
+    return (n_top, n_sub)
 
 def listify(text: str) -> Markup:
     """
@@ -1022,31 +1111,29 @@ def validate(
         if use_db and db_url:
             with get_session(db_url) as ses:
                 db_schema = load_annex_iv_from_db(ses, celex_id=celex_id)
-            def _extract_subpoints(text: str) -> list[str]:
-                letters: list[str] = []
-                for line in text.splitlines():
-                    m = SUBPOINT_RE.match(line)
-                    if m:
-                        letters.append(m.group(1).lower())
-                return letters
-
             for _, key in SECTION_MAPPING:
-                db_text = db_schema.get(key)
+                db_text = (db_schema.get(key) or "").strip()
                 user_text = str(payload.get(key) or "").strip()
                 if not db_text:
                     continue
                 if not user_text:
                     violations.append({
                         "rule": f"{key}_required",
-                        "msg": f"Annex IV requires content for '{key}' (per current DB snapshot).",
+                        "msg": f"Annex IV requires content for '{key}' (per DB snapshot).",
                     })
                     continue
-                for letter in _extract_subpoints(db_text):
-                    if not re.search(rf"\({letter}\)", user_text, re.I):
-                        violations.append({
-                            "rule": f"{key}_{letter}_required",
-                            "msg": f"Section '{key}' requires subpoint ({letter}) (per current DB snapshot).",
-                        })
+                exp_top, exp_sub = _count_subpoints_db(db_text)
+                got_top, got_sub = _count_subpoints_user(user_text)
+                if exp_top >= 2 and got_top < exp_top:
+                    violations.append({
+                        "rule": f"{key}_subpoints_insufficient",
+                        "msg": f"{key}: expected ≥{exp_top} top-level subpoints, got {got_top}.",
+                    })
+                if exp_sub >= 2 and got_sub < exp_sub:
+                    violations.append({
+                        "rule": f"{key}_subsub_insufficient",
+                        "msg": f"{key}: first subpoint expected ≥{exp_sub} nested items, got {got_sub}.",
+                    })
 
         if sarif and violations:
             _write_sarif(violations, sarif, str(input))
