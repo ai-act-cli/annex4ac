@@ -198,7 +198,10 @@ def load_annex_iv_from_db(
 
     rows = ses.execute(
         select(Rule.section_code, Rule.content, Rule.order_index)
-        .where(Rule.regulation_id == regulation_id, Rule.section_code.like("AnnexIV%"))
+        .where(
+            Rule.regulation_id == regulation_id, 
+            Rule.section_code.like("AnnexIV.%")
+        )
         .order_by(
             Rule.order_index.asc().nulls_last(),
             func.regexp_replace(
