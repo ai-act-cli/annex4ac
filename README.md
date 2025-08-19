@@ -61,9 +61,6 @@ annex4ac generate my_annex.yaml --output annex_iv.docx --fmt docx
 export ANNEX4AC_LICENSE="your_jwt_token_here"
 annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf
 
-# Skip validation if needed (not recommended)
-annex4ac generate my_annex.yaml --output annex_iv.pdf --fmt pdf --skip-validation
-
 # 5 Review existing documentation (optional)
 # Note: Review functionality has been moved to annex4nlp package
 annex4nlp annex_iv.pdf  # Analyze for compliance issues
@@ -127,7 +124,7 @@ annex4nlp doc1.pdf doc2.pdf  # Compare multiple documents for contradictions
 | `fetch-schema` | Download the current Annex IV scaffold from the web or a PostgreSQL DB (`--db-url`, `--source-preference`). |
 | `update-annex3-cache` | Refresh cached Annex III high-risk tags stored under the user cache directory. |
 | `validate`     | Validate your YAML against the Pydantic schema and built-in Python rules. Exits 1 on error. Supports `--sarif` for GitHub annotations, `--stale-after` for optional freshness heuristic, and `--strict-age` for strict age checking. |
-| `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. Validates by default (`--skip-validation` to bypass). PDF requires license, HTML/DOCX are free. |
+| `generate`     | Render PDF (Pro), HTML, or DOCX from YAML. PDF requires license, HTML/DOCX are free. |
 | `annex4nlp`       | Review functionality has been moved to `annex4nlp` package. Analyze PDF technical documentation for compliance issues, missing sections, and contradictions between documents. Uses advanced NLP for intelligent negation detection. Provides detailed console output with error/warning classification.|
 
 Run `annex4ac --help` for full CLI.

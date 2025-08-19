@@ -1206,19 +1206,10 @@ def generate(
     input: Path = typer.Argument(..., help="YAML input file"),
     output: Path = typer.Option(None, help="Output file name"),
     fmt: str = typer.Option("pdf", help="pdf | html | docx"),
-    pdfa: bool = typer.Option(False, help="Convert PDF to PDF/A-2b format for archival"),
-    skip_validation: bool = typer.Option(False, help="Don't validate before rendering"),
+    pdfa: bool = typer.Option(False, help="Convert PDF to PDF/A-2b format for archival")
 ):
     """Generate output from YAML: PDF (default), HTML, or DOCX."""
     payload = yaml.safe_load(input.read_text(encoding='utf-8'))
-
-    if not skip_validation:
-        violations, _warnings = _validate_payload(payload)
-        if violations:
-            for v in violations:
-                typer.secho(f"[VALIDATION] {v['rule']}: {v['msg']}", fg=typer.colors.RED, err=True)
-            raise typer.Exit(1)
-        AnnexIVSchema(**payload)
 
     # Build unified metadata for all formats (includes retention calculation)
     meta = _build_doc_meta(payload)
