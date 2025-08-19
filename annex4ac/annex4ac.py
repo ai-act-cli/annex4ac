@@ -127,7 +127,10 @@ BULLET_RE = re.compile(r'^\s*(?:[\u2022\u25CF\u25AA\u00B7\u2013\u2014\-\*])\s+')
 # allow any letter a-z; roman numerals filtered separately via ROMAN_RE
 SUBPOINT_RE = re.compile(r'^\s*\(([a-z])\)\s+', re.I)
 TOP_BULLET_RE = re.compile(r'^\s{0,3}(?:[-*\u2022\u25AA\u00B7\u2013\u2014]|\d+[\.)])\s+')
-ROMAN_RE = re.compile(r'^\s*\(([ivxlcdm]+)\)\s+', re.I)
+# Roman numerals in Annex IV use only i/v/x combinations like (i), (ii), …
+# Limit the pattern to those letters so that (c), (d) etc. are treated as
+# regular alphabetic subpoints rather than filtered as roman numerals.
+ROMAN_RE = re.compile(r'^\s*\(([ivx]+)\)\s+', re.I)
 
 
 def _normalize_lines(text: str) -> list[str]:
@@ -1044,7 +1047,7 @@ def fetch_schema(
 
     settings = Settings()
     db_url = db_url or settings.db_url
-    celex_id = celex_id or settings.celex_id
+    celex_id = celex_id or settings.celex_id or None
     source_preference = (source_preference.value if source_preference else settings.source_preference)
 
     cache_dir = user_cache_dir("annex4ac")
@@ -1115,7 +1118,10 @@ def validate(
     use_db: bool = typer.Option(False, help="Cross-check sections against DB"),
     db_url: str = typer.Option(None, help="SQLAlchemy DB URL (postgresql+psycopg://...)"),
     celex_id: Optional[str] = typer.Option(None, help="CELEX id (optional)"),
-    explain: bool = typer.Option(False, help="Show which subpoints are missing when using --use-db"),
+    explain: bool = typer.Option(
+        True,
+        help="Show which subpoints are missing when using --use-db; use --no-explain to hide",
+    ),
 ):
     """Validate user YAML against required Annex IV keys; exit 1 on error."""
     if stale_after == 0:
@@ -1123,7 +1129,7 @@ def validate(
     try:
         settings = Settings()
         db_url = db_url or settings.db_url
-        celex_id = celex_id or settings.celex_id
+        celex_id = celex_id or settings.celex_id or None
 
         from ruamel.yaml import YAML
         yaml_ruamel = YAML(typ="rt")

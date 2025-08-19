@@ -46,8 +46,8 @@ annex4ac validate my_annex.yaml   # "Validation OK!" or exit 1
 annex4ac validate my_annex.yaml --stale-after 30  # Warn if older than 30 days
 annex4ac validate my_annex.yaml --stale-after 180 --strict-age  # Fail CI if older than 180 days
 # Cross-check sections against the database and emit SARIF for GitHub
-annex4ac validate my_annex.yaml --use-db --db-url "$ANNEX4AC_DB_URL" --explain --sarif out.sarif
-# --explain lists missing lettered subpoints like (c) or (d). This checks the minimum required count of
+annex4ac validate my_annex.yaml --use-db --db-url "$ANNEX4AC_DB_URL" --sarif out.sarif
+# --no-explain hides missing lettered subpoints like (c) or (d). This checks the minimum required count of
 # top-level and nested subpoints, not literal (a)/(b)/(c) markers
 
 # 4 Generate output (PDF requires license)
