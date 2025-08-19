@@ -104,6 +104,7 @@ def get_latest_regulation_id_with_annex(ses: Session) -> str:
                 select(func.max(Rule.last_modified)).where(Rule.regulation_id == rid)
             ).scalar()
         except Exception:
+            ses.rollback()
             max_rule_ts = None
 
         try:
@@ -111,6 +112,7 @@ def get_latest_regulation_id_with_annex(ses: Session) -> str:
                 select(func.max(Rule.effective_date)).where(Rule.regulation_id == rid)
             ).scalar()
         except Exception:
+            ses.rollback()
             max_rule_eff = None
 
         try:
@@ -120,6 +122,7 @@ def get_latest_regulation_id_with_annex(ses: Session) -> str:
             ).one_or_none()
             reg_version, reg_last, reg_eff = reg if reg else (None, None, None)
         except Exception:
+            ses.rollback()
             reg_version = reg_last = reg_eff = None
 
         try:
@@ -144,6 +147,7 @@ def get_latest_regulation_id_with_annex(ses: Session) -> str:
             rsl_last = rsl[0] if rsl else None
             rsl_prio = rsl[1] if rsl else 0
         except Exception:
+            ses.rollback()
             rsl_last, rsl_prio = None, 0
 
         candidates.append(
@@ -195,21 +199,24 @@ def load_annex_iv_from_db(
                 raise ValueError(f"CELEX {celex_id} not found in database")
         else:
             regulation_id = get_latest_regulation_id_with_annex(ses)
-
-    rows = ses.execute(
-        select(Rule.section_code, Rule.content, Rule.order_index)
-        .where(
-            Rule.regulation_id == regulation_id, 
-            Rule.section_code.like("AnnexIV.%")
-        )
-        .order_by(
-            Rule.order_index.asc().nulls_last(),
-            func.regexp_replace(
-                Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1",
-            ).cast(Integer),
-            Rule.section_code.asc(),
-        )
-    ).all()
+    try:
+        rows = ses.execute(
+            select(Rule.section_code, Rule.content, Rule.order_index)
+            .where(
+                Rule.regulation_id == regulation_id,
+                Rule.section_code.like("AnnexIV.%")
+            )
+            .order_by(
+                Rule.order_index.asc().nulls_last(),
+                func.regexp_replace(
+                    Rule.section_code, r"^AnnexIV\.(\d+).*$", r"\1",
+                ).cast(Integer),
+                Rule.section_code.asc(),
+            )
+        ).all()
+    except Exception as exc:
+        ses.rollback()
+        raise RuntimeError("Failed to load Annex IV from DB") from exc
 
     buckets: dict[str, List[Tuple[str, str, Optional[int]]]] = defaultdict(list)
     for sc, content, idx in rows:
@@ -271,11 +278,14 @@ def get_expected_top_counts(
                 raise ValueError(f"CELEX {celex_id} not found")
         else:
             regulation_id = get_latest_regulation_id_with_annex(ses)
-
-    rows = ses.execute(
-        select(Rule.section_code)
-        .where(Rule.regulation_id == regulation_id, Rule.section_code.like("AnnexIV.%"))
-    ).scalars().all()
+    try:
+        rows = ses.execute(
+            select(Rule.section_code)
+            .where(Rule.regulation_id == regulation_id, Rule.section_code.like("AnnexIV.%"))
+        ).scalars().all()
+    except Exception as exc:
+        ses.rollback()
+        raise RuntimeError("Failed to load Annex IV section codes") from exc
 
     counts: dict[str, int] = defaultdict(int)
     for sc in rows:
