@@ -3,7 +3,7 @@ Constants for Annex4AC project.
 """
 
 # Schema version (automatically added if not provided)
-SCHEMA_VERSION = "20240726"
+SCHEMA_VERSION = "20240613"
 
 # Primary source – HTML (easier to parse than PDF)
 AI_ACT_ANNEX_IV_HTML = "https://artificialintelligenceact.eu/annex/4/"
