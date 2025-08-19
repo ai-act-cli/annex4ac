@@ -1170,7 +1170,7 @@ def validate(
                 if exp_top >= 2 and got_top < exp_top:
                     msg = f"{key}: expected ≥{exp_top} top-level subpoints, got {got_top}."
                     if explain and missing_letters:
-                        msg += " Missing: " + ", ".join(f"({l})" for l in missing_letters) + "."
+                        msg += "\nMissing: " + ", ".join(f"({l})" for l in missing_letters) + "."
                     violation = {
                         "rule": f"{key}_subpoints_insufficient",
                         "msg": msg,
